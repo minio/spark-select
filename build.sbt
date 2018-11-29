@@ -28,6 +28,7 @@ sparkComponents := Seq("sql")
 // Dependent libraries
 libraryDependencies ++= Seq(
   "com.amazonaws" % "aws-java-sdk" % "1.11.434" exclude("com.fasterxml.jackson.core", "jackson-databind"),
+  "org.apache.commons" % "commons-csv" % "1.1",
   "org.mockito" % "mockito-core" % "2.0.31-beta"
 )
 

@@ -15,23 +15,22 @@
  */
 package io.minio.spark.select
 
+import java.io.InputStreamReader
+import java.io.BufferedReader
+
+// Import all utilities
+import io.minio.spark.select.util._
+
 // For AmazonS3 client
 import com.amazonaws.services.s3.AmazonS3
 
 // Select object
-import com.amazonaws.services.s3.model.CSVInput
-import com.amazonaws.services.s3.model.CSVOutput
-import com.amazonaws.services.s3.model.CompressionType
-import com.amazonaws.services.s3.model.ExpressionType
-import com.amazonaws.services.s3.model.InputSerialization
-import com.amazonaws.services.s3.model.OutputSerialization
+import com.amazonaws.services.s3.model.SelectObjectContentResult
 import com.amazonaws.services.s3.model.SelectObjectContentEvent
 import com.amazonaws.services.s3.model.SelectObjectContentEvent.RecordsEvent
-import com.amazonaws.services.s3.model.SelectObjectContentEventVisitor
-import com.amazonaws.services.s3.model.SelectObjectContentRequest
-import com.amazonaws.services.s3.model.SelectObjectContentResult
 
 import org.apache.log4j.Logger
+import org.apache.commons.csv.{CSVParser, CSVFormat, CSVRecord, QuoteMode}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -43,65 +42,57 @@ import org.apache.spark.sql.{DataFrame, Row, SQLContext}
   * Abstract relation class for download data from Amazon S3
   */
 private[select] case class SelectRelation(
-  params: Map[String, String],
-  s3Client: AmazonS3,
+  sResult: SelectObjectContentResult,
+  csvFormat: CSVFormat,
   userSchema: Option[StructType] = None)(@transient val sqlContext: SQLContext)
     extends BaseRelation with TableScan {
 
   private val logger = Logger.getLogger(getClass)
-  private val bucketName = params.getOrElse("bucketName", sys.error("Amazon S3 Bucket has to be provided"))
-  private val objectName = params.getOrElse("objectName", sys.error("Amazon S3 Object has to be provided"))
-  private val query = params.getOrElse("query", sys.error("Amazon S3 Select query has to be provided"))
 
-  override lazy val schema: StructType = {
-    userSchema.getOrElse {
-      val fields = new Array[StructField](10)
-      var i = 0
-      while (i < 10) {
-        fields(i) = StructField("dummy", StringType, false)
-        i = i + 1
+  override lazy val schema: StructType = userSchema.getOrElse(inferSchema())
+
+  private lazy val rows: List[Array[String]] = {
+    var records : List[Array[String]] = null
+    val br = new BufferedReader(new InputStreamReader(sResult.getPayload().getRecordsInputStream()))
+    var line : String = null
+    while ( {line = br.readLine(); line != null}) {
+      val r = CSVParser.parse(line, csvFormat).getRecords
+      if (r.isEmpty) {
+        logger.warn(s"Ignoring empty line: $line")
+      } else {
+        records :+ r.toArray
       }
-      new StructType(fields)
     }
+    br.close()
+    records
   }
 
-  override def toString: String = s"SelectRelation($query)"
+  override def toString: String = s"SelectRelation()"
 
-  override def buildScan(): RDD[Row] = {
-    val request = new SelectObjectContentRequest()
-    request.setBucketName(bucketName)
-    request.setKey(objectName)
-    request.setExpression(query)
-    request.setExpressionType(ExpressionType.SQL)
-
-    val inputSerialization = new InputSerialization()
-    inputSerialization.setCsv(new CSVInput())
-    inputSerialization.setCompressionType(CompressionType.NONE)
-    request.setInputSerialization(inputSerialization)
-
-    val outputSerialization = new OutputSerialization()
-    outputSerialization.setCsv(new CSVOutput())
-    request.setOutputSerialization(outputSerialization)
-
-    val result = s3Client.selectObjectContent(request)
-    var numRows = 0
-    try {
-      val resultInputStream = result.getPayload().getRecordsInputStream(
-        new SelectObjectContentEventVisitor() {
-          override def visit(event: SelectObjectContentEvent.RecordsEvent) = {
-            numRows = numRows + 1
-          }
+  override def buildScan: RDD[Row] = {
+    val aSchema = schema
+    sqlContext.sparkContext.makeRDD(rows).mapPartitions{ iter =>
+      iter.map { m =>
+        var index = 0
+        val rowArray = new Array[Any](aSchema.fields.length)
+        while(index < aSchema.fields.length) {
+          val field = aSchema.fields(index)
+          rowArray(index) = TypeCast.castTo(field.name, field.dataType, field.nullable)
+          index += 1
         }
-      )
-    } finally {
-      result.close()
+        Row.fromSeq(rowArray)
+      }
     }
-    val parallelism = sqlContext.getConf("spark.sql.shuffle.partitions", "200").toInt
-    val emptyRow = RowEncoder(StructType(Seq.empty)).toRow(Row(Seq.empty))
-    sqlContext.sparkContext
-      .parallelize(1L to numRows, parallelism)
-      .map(_ => emptyRow)
-      .asInstanceOf[RDD[Row]]
-  }
 
+    }
+
+  private def inferSchema(): StructType = {
+    val fields = new Array[StructField](rows(0).length)
+    var index = 0
+    while (index < rows(0).length) {
+      fields(index) = StructField("C$index", StringType, nullable = true)
+      index += 1
+    }
+    new StructType(fields)
+  }
 }
