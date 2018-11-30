@@ -23,8 +23,23 @@ import io.minio.spark.select.util._
 
 // For AmazonS3 client
 import com.amazonaws.services.s3.AmazonS3
+import com.amazonaws.services.s3.AmazonS3ClientBuilder
 
-// Select object
+// For BasicAWSCredentials
+import com.amazonaws.auth.AWSCredentials
+import com.amazonaws.auth.AWSCredentialsProvider
+import com.amazonaws.auth.BasicAWSCredentials
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
+import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
+
+// Select API
+import com.amazonaws.services.s3.model.CSVInput
+import com.amazonaws.services.s3.model.CSVOutput
+import com.amazonaws.services.s3.model.CompressionType
+import com.amazonaws.services.s3.model.ExpressionType
+import com.amazonaws.services.s3.model.InputSerialization
+import com.amazonaws.services.s3.model.OutputSerialization
+import com.amazonaws.services.s3.model.SelectObjectContentRequest
 import com.amazonaws.services.s3.model.SelectObjectContentResult
 import com.amazonaws.services.s3.model.SelectObjectContentEvent
 import com.amazonaws.services.s3.model.SelectObjectContentEvent.RecordsEvent
@@ -38,22 +53,85 @@ import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation, TableScan
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
+import org.apache.hadoop.conf.Configuration
+
 /**
   * Abstract relation class for download data from Amazon S3
   */
 private[select] case class SelectRelation(
-  sResult: SelectObjectContentResult,
+  params: Map[String, String],
   csvFormat: CSVFormat,
   userSchema: Option[StructType] = None)(@transient val sqlContext: SQLContext)
     extends BaseRelation with TableScan {
 
   private val logger = Logger.getLogger(getClass)
+  private val hadoopConfiguration = sqlContext.sparkContext.hadoopConfiguration
+  private val pathStyleAccess = hadoopConfiguration.get(s"fs.s3a.path.style.access", "false") == "true"
+  private val s3Client =
+    AmazonS3ClientBuilder.standard()
+      .withCredentials(loadFromHadoop(hadoopConfiguration))
+      .withPathStyleAccessEnabled(pathStyleAccess)
+      .withEndpointConfiguration(
+      new EndpointConfiguration(hadoopConfiguration.get(s"fs.s3a.endpoint", null), "us-east-1"))
+      .build()
+
+  private def staticCredentialsProvider(credentials: AWSCredentials): AWSCredentialsProvider = {
+    new AWSCredentialsProvider {
+      override def getCredentials: AWSCredentials = credentials
+      override def refresh(): Unit = {}
+    }
+  }
+
+  private def loadFromHadoop(hadoopCfg: Configuration): AWSCredentialsProvider = {
+    val accessKey = hadoopCfg.get(s"fs.s3a.access.key", null)
+    val secretKey = hadoopCfg.get(s"fs.s3a.secret.key", null)
+    if (accessKey != null && secretKey != null) {
+      Some(staticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey)))
+    } else {
+      None
+    }
+  }.getOrElse {
+    // Finally, fall back on the instance profile provider
+    new DefaultAWSCredentialsProviderChain()
+  }
+
+  private def selectRequest(params: Map[String, String]): SelectObjectContentRequest = {
+    val bucketName = params.getOrElse("bucketName", sys.error("Amazon S3 Bucket has to be provided"))
+    val objectName = params.getOrElse("objectName", sys.error("Amazon S3 Object has to be provided"))
+    val query = params.getOrElse("query", sys.error("Amazon S3 Select query has to be provided"))
+
+    // TODO support
+    //
+    // compression : "none" : Indicates whether compression is used. "gzip" is the only setting supported besides "none".
+    // header : "false" : "false" specifies that there is no header. "true" specifies that a header is in
+    //                    the first line. Only headers in the first line are supported, and empty lines
+    //                    before a header are not supported.
+    // nullValue : "" :
+
+    new SelectObjectContentRequest() { request =>
+      request.setBucketName(bucketName)
+      request.setKey(objectName)
+      request.setExpression(query)
+      request.setExpressionType(ExpressionType.SQL)
+
+      val inputSerialization = new InputSerialization()
+      inputSerialization.setCsv(new CSVInput())
+      inputSerialization.setCompressionType(CompressionType.NONE)
+      request.setInputSerialization(inputSerialization)
+
+      val outputSerialization = new OutputSerialization()
+      outputSerialization.setCsv(new CSVOutput())
+      request.setOutputSerialization(outputSerialization)
+    }
+  }
 
   override lazy val schema: StructType = userSchema.getOrElse(inferSchema())
 
   private lazy val rows: List[Array[String]] = {
     var records : List[Array[String]] = null
-    val br = new BufferedReader(new InputStreamReader(sResult.getPayload().getRecordsInputStream()))
+    val br = new BufferedReader(new InputStreamReader(s3Client.selectObjectContent(selectRequest(params))
+      .getPayload()
+      .getRecordsInputStream()))
     var line : String = null
     while ( {line = br.readLine(); line != null}) {
       val r = CSVParser.parse(line, csvFormat).getRecords
