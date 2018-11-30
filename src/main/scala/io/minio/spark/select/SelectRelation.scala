@@ -43,6 +43,7 @@ import com.amazonaws.services.s3.model.SelectObjectContentRequest
 import com.amazonaws.services.s3.model.SelectObjectContentResult
 import com.amazonaws.services.s3.model.SelectObjectContentEvent
 import com.amazonaws.services.s3.model.SelectObjectContentEvent.RecordsEvent
+import com.amazonaws.services.s3.model.FileHeaderInfo
 
 import org.apache.log4j.Logger
 import org.apache.commons.csv.{CSVParser, CSVFormat, CSVRecord, QuoteMode}
@@ -54,6 +55,8 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 import org.apache.hadoop.conf.Configuration
+
+import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 
 /**
   * Abstract relation class for download data from Amazon S3
@@ -115,12 +118,19 @@ private[select] case class SelectRelation(
       request.setExpressionType(ExpressionType.SQL)
 
       val inputSerialization = new InputSerialization()
-      inputSerialization.setCsv(new CSVInput())
+      val csvInput = new CSVInput()
+      csvInput.withFileHeaderInfo(FileHeaderInfo.USE)
+      csvInput.withRecordDelimiter('\n')
+      csvInput.withFieldDelimiter(',')
+      inputSerialization.setCsv(csvInput)
       inputSerialization.setCompressionType(CompressionType.NONE)
       request.setInputSerialization(inputSerialization)
 
       val outputSerialization = new OutputSerialization()
-      outputSerialization.setCsv(new CSVOutput())
+      val csvOutput = new CSVOutput()
+      csvOutput.withRecordDelimiter('\n')
+      csvOutput.withFieldDelimiter(',')
+      outputSerialization.setCsv(csvOutput)
       request.setOutputSerialization(outputSerialization)
     }
   }
@@ -128,21 +138,16 @@ private[select] case class SelectRelation(
   override lazy val schema: StructType = userSchema.getOrElse(inferSchema())
 
   private lazy val rows: List[Array[String]] = {
-    var records : List[Array[String]] = null
+    var records = new ListBuffer[Array[String]]()
     val br = new BufferedReader(new InputStreamReader(s3Client.selectObjectContent(selectRequest(params))
       .getPayload()
       .getRecordsInputStream()))
     var line : String = null
     while ( {line = br.readLine(); line != null}) {
-      val r = CSVParser.parse(line, csvFormat).getRecords
-      if (r.isEmpty) {
-        logger.warn(s"Ignoring empty line: $line")
-      } else {
-        records :+ r.toArray
-      }
+      records += line.split(",")
     }
     br.close()
-    records
+    records.toList
   }
 
   override def toString: String = s"SelectRelation()"
@@ -153,9 +158,9 @@ private[select] case class SelectRelation(
       iter.map { m =>
         var index = 0
         val rowArray = new Array[Any](aSchema.fields.length)
-        while(index < aSchema.fields.length) {
+        while (index < aSchema.fields.length) {
           val field = aSchema.fields(index)
-          rowArray(index) = TypeCast.castTo(field.name, field.dataType, field.nullable)
+          rowArray(index) = TypeCast.castTo(m(index), field.dataType, field.nullable)
           index += 1
         }
         Row.fromSeq(rowArray)
@@ -168,7 +173,7 @@ private[select] case class SelectRelation(
     val fields = new Array[StructField](rows(0).length)
     var index = 0
     while (index < rows(0).length) {
-      fields(index) = StructField("C$index", StringType, nullable = true)
+      fields(index) = StructField(s"C$index", StringType, nullable = true)
       index += 1
     }
     new StructType(fields)

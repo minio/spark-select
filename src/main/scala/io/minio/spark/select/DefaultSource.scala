@@ -26,12 +26,7 @@ import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 class DefaultSource extends DataSourceRegister with RelationProvider with SchemaRelationProvider {
   private val logger = Logger.getLogger(getClass)
 
-  override def shortName: String = "selectCSV"
-
-  override def equals(other: Any): Boolean = other match {
-    case _: DefaultSource => true
-    case _ => false
-  }
+  override def shortName(): String = "selectCSV"
 
   private val defaultCsvFormat =
     CSVFormat.DEFAULT.withRecordSeparator(System.getProperty("line.separator", "\n"))
@@ -54,17 +49,11 @@ class DefaultSource extends DataSourceRegister with RelationProvider with Schema
       .withCommentMarker(comment.charAt(0))
   }
 
-  /**
-    * Reading files from Amazon S3.
-    */
-  override def createRelation(sqlContext: SQLContext, params: Map[String, String]): SelectRelation = {
+  override def createRelation(sqlContext: SQLContext, params: Map[String, String]): BaseRelation = {
     SelectRelation(params, defaultCsvFormat, None)(sqlContext)
   }
 
-  /**
-    * Reading files from Amazon S3.
-    */
-  override def createRelation(sqlContext: SQLContext, params: Map[String, String], schema: StructType): SelectRelation = {
+  override def createRelation(sqlContext: SQLContext, params: Map[String, String], schema: StructType): BaseRelation = {
     SelectRelation(params, defaultCsvFormat, Some(schema))(sqlContext)
   }
 
