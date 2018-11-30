@@ -54,7 +54,7 @@ import org.apache.commons.csv.{CSVParser, CSVFormat, CSVRecord, QuoteMode}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation, TableScan}
+import org.apache.spark.sql.sources.{BaseRelation, TableScan, PrunedScan}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
@@ -70,7 +70,8 @@ case class SelectRelation protected[spark] (
   params: Map[String, String],
   userSchema: StructType = null)(@transient val sqlContext: SQLContext)
     extends BaseRelation
-    with TableScan {
+    with TableScan
+    with PrunedScan {
 
   private val logger = Logger.getLogger(getClass)
   private val hadoopConfiguration = sqlContext.sparkContext.hadoopConfiguration
@@ -127,9 +128,22 @@ case class SelectRelation protected[spark] (
     new DefaultAWSCredentialsProviderChain()
   }
 
+  private def resolveQuery(schema: StructType): String = {
+    if (schema == null) {
+      "select * from S3Object"
+    } else {
+      var index = 0
+      var selector = new Array[Any](schema.fields.length)
+      while (index < schema.fields.length) {
+        selector(index) = schema.fields(index).name
+        index += 1
+      }
+      "select " ++ selector.mkString(",") ++ " from S3Object"
+    }
+  }
+
   private def selectRequest(location: Option[String], params: Map[String, String]): SelectObjectContentRequest = {
     val s3URI = new AmazonS3URI(location.getOrElse(""))
-    val query = params.getOrElse("query", sys.error("Select query has to be provided"))
 
     // TODO support
     //
@@ -142,7 +156,7 @@ case class SelectRelation protected[spark] (
     new SelectObjectContentRequest() { request =>
       request.setBucketName(s3URI.getBucket())
       request.setKey(s3URI.getKey())
-      request.setExpression(query)
+      request.setExpression(resolveQuery(userSchema))
       request.setExpressionType(ExpressionType.SQL)
 
       val inputSerialization = new InputSerialization()
@@ -182,14 +196,13 @@ case class SelectRelation protected[spark] (
 
   override def toString: String = s"SelectRelation()"
 
-  override def buildScan: RDD[Row] = {
-    val aSchema = schema
+  private def tokenRDD(schema: StructType): RDD[Row] = {
     sqlContext.sparkContext.makeRDD(rows).mapPartitions{ iter =>
       iter.map { m =>
         var index = 0
-        val rowArray = new Array[Any](aSchema.fields.length)
-        while (index < aSchema.fields.length) {
-          val field = aSchema.fields(index)
+        val rowArray = new Array[Any](schema.fields.length)
+        while (index < schema.fields.length) {
+          val field = schema.fields(index)
           rowArray(index) = TypeCast.castTo(m(index), field.dataType, field.nullable)
           index += 1
         }
@@ -198,11 +211,26 @@ case class SelectRelation protected[spark] (
     }
   }
 
+  override def buildScan(): RDD[Row] = {
+    tokenRDD(schema)
+  }
+
+  override def buildScan(requiredColumns: Array[String]): RDD[Row] = {
+    val requiredFields = requiredColumns.map(schema(_))
+    val schemaFields = schema.fields
+    // Check if requested fields are same as schema
+    if (schemaFields.deep == requiredFields.deep) {
+      buildScan()
+    } else {
+      tokenRDD(StructType(requiredFields))
+    }
+  }
+
   private def inferSchema(): StructType = {
     val fields = new Array[StructField](rows(0).length)
     var index = 0
     while (index < rows(0).length) {
-      fields(index) = StructField(s"C$index", StringType, nullable = true)
+      fields(index) = StructField(s"s._${index+1}", StringType, nullable = true)
       index += 1
     }
     new StructType(fields)
