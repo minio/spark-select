@@ -25,6 +25,11 @@ testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.va
 // used spark components
 sparkComponents := Seq("sql")
 
+assemblyMergeStrategy in assembly := {
+ case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+ case x => MergeStrategy.first
+}
+
 // Dependent libraries
 libraryDependencies ++= Seq(
   "com.amazonaws" % "aws-java-sdk" % "1.11.434" exclude("com.fasterxml.jackson.core", "jackson-databind"),
