@@ -12,7 +12,7 @@ Spark 2.3+:
 
 ```scala
 spark.read
-    .format("io.minio.spark.select")
+    .format("selectCSV")
     .option("query", "select * from S3Object")
     .load("s3://bucket/object.csv")
 ```
@@ -50,7 +50,7 @@ Using Scala version 2.11.8 (OpenJDK 64-Bit Server VM, Java 1.8.0_181)
 Type in expressions to have them evaluated.
 Type :help for more information.
 
-scala> var df = spark.read.format("io.minio.spark.select").option("query", "select * from S3Object").load("s3://sjm-airlines/test.csv")
+scala> var df = spark.read.format("selectCSV").option("query", "select * from S3Object").load("s3://sjm-airlines/test.csv")
 df: org.apache.spark.sql.DataFrame = [C0: string, C1: string ... 15 more fields]
 
 scala> df.count()
