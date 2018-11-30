@@ -1,4 +1,4 @@
-# Spark Select Connector Library
+# Spark S3 Select Connector Library
 A library for downloading dataframes from S3 compatible object storage using Select API.
 
 ## Requirements
@@ -11,12 +11,10 @@ This package can be used to download a dataframe from S3 compatible object stora
 Spark 2.3+:
 
 ```scala
-dataFrame.read
-    .format("io.minio.spark-select")
-    .option("bucketName", "my-bucketname")
-    .option("objectName", "my-objectname")
+spark.read
+    .format("io.minio.spark.select")
     .option("query", "select * from S3Object")
-    .load()
+    .load("s3://bucket/object.csv")
 ```
 
 ### Using spark-select
@@ -52,19 +50,8 @@ Using Scala version 2.11.8 (OpenJDK 64-Bit Server VM, Java 1.8.0_181)
 Type in expressions to have them evaluated.
 Type :help for more information.
 
-scala> var df = spark.read.format("io.minio.spark.select").option("bucketName", "sjm-airlines").option("objectName", "test.csv").option("query", "select * from S3Object").load()
+scala> var df = spark.read.format("io.minio.spark.select").option("query", "select * from S3Object").load("s3://sjm-airlines/test.csv")
 df: org.apache.spark.sql.DataFrame = [C0: string, C1: string ... 15 more fields]
-
-scala> df.show()
-+--------+----------+--------+----------+--------------------+---+---+------------------+---------------+--------------------+------------+-----------+---+---+---+---+--------+
-|      C0|        C1|      C2|        C3|                  C4| C5| C6|                C7|             C8|                  C9|         C10|        C11|C12|C13|C14|C15|     C16|
-+--------+----------+--------+----------+--------------------+---+---+------------------+---------------+--------------------+------------+-----------+---+---+---+---+--------+
-|9/5/2011|3:00:00 PM|9/5/2011|      null|Social Studies De...|  N|  Y|Department meeting|Chris Gallagher|cgallagher@school...|814-555-5179|High School|  2|  N|  N| 25|9/2/2011|
-|9/5/2011|6:00:00 PM|9/5/2011|8:00:00 PM|  Curriculum Meeting|  N|  N|Curriculum Meeting|Chris Gallagher|cgallagher@school...|814-555-5179|High School|  2|  N|  N| 25|9/2/2011|
-+--------+----------+--------+----------+--------------------+---+---+------------------+---------------+--------------------+------------+-----------+---+---+---+---+--------+
-
-scala> df.head(1)
-res2: Array[org.apache.spark.sql.Row] = Array([9/5/2011,3:00:00 PM,9/5/2011,null,Social Studies Dept. Meeting,N,Y,Department meeting,Chris Gallagher,cgallagher@schoolwires.com,814-555-5179,High School,2,N,N,25,9/2/2011])
 
 scala> df.count()
 res3: Long = 2

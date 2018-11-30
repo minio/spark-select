@@ -26,8 +26,10 @@ testSparkVersion := sys.props.get("spark.testVersion").getOrElse(sparkVersion.va
 sparkComponents := Seq("sql")
 
 assemblyMergeStrategy in assembly := {
- case PathList("META-INF", xs @ _*) => MergeStrategy.discard
- case x => MergeStrategy.first
+  case "META-INF/io.netty.versions.properties" => MergeStrategy.concat
+  case x =>
+    val oldStrategy = (assemblyMergeStrategy in assembly).value
+    oldStrategy(x)
 }
 
 // Dependent libraries

@@ -21,6 +21,9 @@ import java.io.BufferedReader
 // Import all utilities
 import io.minio.spark.select.util._
 
+// Apache commons
+import org.apache.commons.csv.{CSVFormat, QuoteMode}
+
 // For AmazonS3 client
 import com.amazonaws.services.s3.AmazonS3
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
@@ -33,6 +36,7 @@ import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 
 // Select API
+import com.amazonaws.services.s3.AmazonS3URI
 import com.amazonaws.services.s3.model.CSVInput
 import com.amazonaws.services.s3.model.CSVOutput
 import com.amazonaws.services.s3.model.CompressionType
@@ -59,13 +63,14 @@ import org.apache.hadoop.conf.Configuration
 import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 
 /**
-  * Abstract relation class for download data from Amazon S3
+  * Abstract relation class to download data from S3 compatible storage
   */
-private[select] case class SelectRelation(
+case class SelectRelation protected[spark] (
+  location: Option[String],
   params: Map[String, String],
-  csvFormat: CSVFormat,
-  userSchema: Option[StructType] = None)(@transient val sqlContext: SQLContext)
-    extends BaseRelation with TableScan {
+  userSchema: StructType = null)(@transient val sqlContext: SQLContext)
+    extends BaseRelation
+    with TableScan {
 
   private val logger = Logger.getLogger(getClass)
   private val hadoopConfiguration = sqlContext.sparkContext.hadoopConfiguration
@@ -77,6 +82,30 @@ private[select] case class SelectRelation(
       .withEndpointConfiguration(
       new EndpointConfiguration(hadoopConfiguration.get(s"fs.s3a.endpoint", null), "us-east-1"))
       .build()
+
+  private val defaultCsvFormat =
+    CSVFormat.DEFAULT.withRecordSeparator(System.getProperty("line.separator", "\n"))
+
+  val csvFormat = customCSVFormat(params, defaultCsvFormat)
+
+  private def customCSVFormat(params: Map[String, String], csvFormat: CSVFormat): CSVFormat = {
+
+    // delimiter :  "," :  Specifies the field delimiter.
+    // quote : '\"' : Specifies the quote character. Specifying an empty string is not supported and results in a malformed XML error.
+    // escape : '\\' : Specifies the escape character.
+    // comment : "#" : Specifies the comment character. The comment indicator cannot be disabled.
+    //                 In other words, a value of \u0000 is not supported.
+    val delimiter = params.getOrElse("delimiter", ",")
+    val quote = params.getOrElse("quote", "\"")
+    val escape = params.getOrElse("escape", "\\")
+    val comment = params.getOrElse("comment", "#")
+
+    csvFormat
+      .withDelimiter(delimiter.charAt(0))
+      .withQuote(quote.charAt(0))
+      .withEscape(escape.charAt(0))
+      .withCommentMarker(comment.charAt(0))
+  }
 
   private def staticCredentialsProvider(credentials: AWSCredentials): AWSCredentialsProvider = {
     new AWSCredentialsProvider {
@@ -98,10 +127,9 @@ private[select] case class SelectRelation(
     new DefaultAWSCredentialsProviderChain()
   }
 
-  private def selectRequest(params: Map[String, String]): SelectObjectContentRequest = {
-    val bucketName = params.getOrElse("bucketName", sys.error("Amazon S3 Bucket has to be provided"))
-    val objectName = params.getOrElse("objectName", sys.error("Amazon S3 Object has to be provided"))
-    val query = params.getOrElse("query", sys.error("Amazon S3 Select query has to be provided"))
+  private def selectRequest(location: Option[String], params: Map[String, String]): SelectObjectContentRequest = {
+    val s3URI = new AmazonS3URI(location.getOrElse(""))
+    val query = params.getOrElse("query", sys.error("Select query has to be provided"))
 
     // TODO support
     //
@@ -112,8 +140,8 @@ private[select] case class SelectRelation(
     // nullValue : "" :
 
     new SelectObjectContentRequest() { request =>
-      request.setBucketName(bucketName)
-      request.setKey(objectName)
+      request.setBucketName(s3URI.getBucket())
+      request.setKey(s3URI.getKey())
       request.setExpression(query)
       request.setExpressionType(ExpressionType.SQL)
 
@@ -121,7 +149,7 @@ private[select] case class SelectRelation(
       val csvInput = new CSVInput()
       csvInput.withFileHeaderInfo(FileHeaderInfo.USE)
       csvInput.withRecordDelimiter('\n')
-      csvInput.withFieldDelimiter(',')
+      csvInput.withFieldDelimiter(params.getOrElse("delimiter", ","))
       inputSerialization.setCsv(csvInput)
       inputSerialization.setCompressionType(CompressionType.NONE)
       request.setInputSerialization(inputSerialization)
@@ -129,17 +157,19 @@ private[select] case class SelectRelation(
       val outputSerialization = new OutputSerialization()
       val csvOutput = new CSVOutput()
       csvOutput.withRecordDelimiter('\n')
-      csvOutput.withFieldDelimiter(',')
+      csvOutput.withFieldDelimiter(params.getOrElse("delimiter", ","))
       outputSerialization.setCsv(csvOutput)
       request.setOutputSerialization(outputSerialization)
     }
   }
 
-  override lazy val schema: StructType = userSchema.getOrElse(inferSchema())
+  override lazy val schema: StructType = {
+    Option(userSchema).getOrElse(inferSchema())
+  }
 
   private lazy val rows: List[Array[String]] = {
     var records = new ListBuffer[Array[String]]()
-    val br = new BufferedReader(new InputStreamReader(s3Client.selectObjectContent(selectRequest(params))
+    val br = new BufferedReader(new InputStreamReader(s3Client.selectObjectContent(selectRequest(location, params))
       .getPayload()
       .getRecordsInputStream()))
     var line : String = null
@@ -166,8 +196,7 @@ private[select] case class SelectRelation(
         Row.fromSeq(rowArray)
       }
     }
-
-    }
+  }
 
   private def inferSchema(): StructType = {
     val fields = new Array[StructField](rows(0).length)

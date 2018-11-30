@@ -15,46 +15,41 @@
  */
 package io.minio.spark.select
 
+// Java standard libraries
 import java.io.File
 
+// Apache commons libraries
 import org.apache.log4j.Logger
-import org.apache.commons.csv.{CSVFormat, QuoteMode}
-import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider, SchemaRelationProvider, DataSourceRegister}
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 
-class DefaultSource extends DataSourceRegister with RelationProvider with SchemaRelationProvider {
+// Spark internal libraries
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.sources.{BaseRelation, RelationProvider, SchemaRelationProvider}
+import org.apache.spark.sql.types.StructType
+
+import org.apache.spark.sql.sources.DataSourceRegister
+
+class DefaultSource
+  extends RelationProvider
+  with SchemaRelationProvider
+  with DataSourceRegister {
+
   private val logger = Logger.getLogger(getClass)
 
+  private def checkPath(parameters: Map[String, String]): String = {
+    parameters.getOrElse("path", sys.error("'path' must be specified for CSV data."))
+  }
+
+  /**
+   * Short alias for spark-select data source.
+   */
   override def shortName(): String = "selectCSV"
 
-  private val defaultCsvFormat =
-    CSVFormat.DEFAULT.withRecordSeparator(System.getProperty("line.separator", "\n"))
-
-  private def customCSVFormat(params: Map[String, String], csvFormat: CSVFormat): CSVFormat = {
-    // delimiter :  "," :  Specifies the field delimiter.
-    // quote : '\"' : Specifies the quote character. Specifying an empty string is not supported and results in a malformed XML error.
-    // escape : '\\' : Specifies the escape character.
-    // comment : "#" : Specifies the comment character. The comment indicator cannot be disabled.
-    //                 In other words, a value of \u0000 is not supported.
-    val delimiter = params.getOrElse("delimiter", ",")
-    val quote = params.getOrElse("quote", "\"")
-    val escape = params.getOrElse("escape", "\\")
-    val comment = params.getOrElse("comment", "#")
-
-    csvFormat
-      .withDelimiter(delimiter.charAt(0))
-      .withQuote(quote.charAt(0))
-      .withEscape(escape.charAt(0))
-      .withCommentMarker(comment.charAt(0))
-  }
-
   override def createRelation(sqlContext: SQLContext, params: Map[String, String]): BaseRelation = {
-    SelectRelation(params, defaultCsvFormat, None)(sqlContext)
+    createRelation(sqlContext, params, null)
   }
 
-  override def createRelation(sqlContext: SQLContext, params: Map[String, String], schema: StructType): BaseRelation = {
-    SelectRelation(params, defaultCsvFormat, Some(schema))(sqlContext)
+  override def createRelation(sqlContext: SQLContext, params: Map[String, String], schema: StructType): SelectRelation = {
+    val path = checkPath(params)
+    SelectRelation(Some(path), params, schema)(sqlContext)
   }
-
 }
