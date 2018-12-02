@@ -10,29 +10,50 @@ This package can be used to download a dataframe from S3 compatible object stora
 ### Scala API
 Spark 2.3+:
 
-With custom schema
+With custom schema for `CSV`.
 ```scala
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
 val struct = StructType(
-  StructField("Category", IntegerType, true) ::
-    StructField("Mandatory", StringType, false) ::
-    StructField("Maximum", IntegerType, false) :: Nil)
+  StructField("name", StringType, true) ::
+    StructField("age", IntegerType, false) :: Nil)
 
-var df = spark.read.format("selectCSV").schema(struct).load("s3://sjm-airlines/test.csv")
+var df = spark.read.format("selectCSV").schema(struct).load("s3://sjm-airlines/people.csv")
 
 println(df.count())
 
 println(df.show())
 ```
 
-Inferred schema by automatically parsing the first record
+With custom schema for `JSON`.
+```scala
+import org.apache.spark.sql._
+import org.apache.spark.sql.types._
+
+val struct = StructType(
+  StructField("name", StringType, true) ::
+    StructField("age", IntegerType, false) :: Nil)
+
+var df = spark.read.format("selectJSON").schema(struct).load("s3://sjm-airlines/people.json")
+
+println(df.count())
+
+println(df.show())
+```
+
+Inferred schema by automatically parsing the first record `CSV`
 ```scala
 spark.read
     .format("selectCSV")
-    .option("query", "select * from S3Object")
     .load("s3://bucket/object.csv")
+```
+
+Inferred schema by automatically parsing the first record in `JSON`
+```scala
+spark.read
+    .format("selectJSON")
+    .load("s3://bucket/object.json")
 ```
 
 ### Using spark-select
@@ -68,9 +89,20 @@ Using Scala version 2.11.8 (OpenJDK 64-Bit Server VM, Java 1.8.0_181)
 Type in expressions to have them evaluated.
 Type :help for more information.
 
-scala> var df = spark.read.format("selectCSV").option("query", "select * from S3Object").load("s3://sjm-airlines/test.csv")
-df: org.apache.spark.sql.DataFrame = [C0: string, C1: string ... 15 more fields]
+scala> :load examples/custom-csv.scala
+Loading examples/custom-csv.scala...
+import org.apache.spark.sql._
+import org.apache.spark.sql.types._
+struct: org.apache.spark.sql.types.StructType = StructType(StructField(name,StringType,true), StructField(age,IntegerType,false))
+df: org.apache.spark.sql.DataFrame = [name: string, age: int]
+3
++-------+---+
+|   name|age|
++-------+---+
+|Michael| 31|
+|   Andy| 30|
+| Justin| 19|
++-------+---+
 
-scala> df.count()
-res3: Long = 2
+()
 ```
