@@ -65,7 +65,7 @@ import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 /**
   * Abstract relation class to download data from S3 compatible storage
   */
-case class SelectRelation protected[spark] (
+case class SelectCSVRelation protected[spark] (
   location: Option[String],
   params: Map[String, String],
   userSchema: StructType = null)(@transient val sqlContext: SQLContext)
@@ -130,6 +130,7 @@ case class SelectRelation protected[spark] (
 
   private def resolveQuery(schema: StructType): String = {
     if (schema == null) {
+      // With no schema we are not filtering any column names.
       "select * from S3Object"
     } else {
       var index = 0
@@ -194,7 +195,7 @@ case class SelectRelation protected[spark] (
     records.toList
   }
 
-  override def toString: String = s"SelectRelation()"
+  override def toString: String = s"SelectCSVRelation()"
 
   private def tokenRDD(schema: StructType): RDD[Row] = {
     sqlContext.sparkContext.makeRDD(rows).mapPartitions{ iter =>

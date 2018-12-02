@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.StructType
 
 import org.apache.spark.sql.sources.DataSourceRegister
 
-class DefaultSource
+class SelectCSVSource
   extends RelationProvider
   with SchemaRelationProvider
   with DataSourceRegister {
@@ -48,8 +48,8 @@ class DefaultSource
     createRelation(sqlContext, params, null)
   }
 
-  override def createRelation(sqlContext: SQLContext, params: Map[String, String], schema: StructType): SelectRelation = {
+  override def createRelation(sqlContext: SQLContext, params: Map[String, String], schema: StructType): SelectCSVRelation = {
     val path = checkPath(params)
-    SelectRelation(Some(path), params, schema)(sqlContext)
+    SelectCSVRelation(Some(path), params, schema)(sqlContext)
   }
 }

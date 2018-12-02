@@ -1,1 +1,2 @@
-io.minio.spark.select.DefaultSource
+io.minio.spark.select.SelectCSVSource
+io.minio.spark.select.SelectJSONSource
