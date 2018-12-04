@@ -49,16 +49,13 @@ import com.amazonaws.services.s3.model.SelectObjectContentEvent
 import com.amazonaws.services.s3.model.SelectObjectContentEvent.RecordsEvent
 import com.amazonaws.services.s3.model.FileHeaderInfo
 
-import org.apache.log4j.Logger
 import org.apache.commons.csv.{CSVParser, CSVFormat, CSVRecord, QuoteMode}
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.sources.{BaseRelation, TableScan, PrunedScan}
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
-
-import org.apache.hadoop.conf.Configuration
 
 import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 
@@ -71,42 +68,25 @@ case class SelectCSVRelation protected[spark] (
   userSchema: StructType = null)(@transient val sqlContext: SQLContext)
     extends BaseRelation
     with TableScan
-    with PrunedScan {
+    with PrunedScan
+    with PrunedFilteredScan {
 
-  private val logger = Logger.getLogger(getClass)
-  private val hadoopConfiguration = sqlContext.sparkContext.hadoopConfiguration
-  private val pathStyleAccess = hadoopConfiguration.get(s"fs.s3a.path.style.access", "false") == "true"
+  private val pathStyleAccess = params.getOrElse(s"path_style_access", "false") == "true"
+  private val endpoint = params.getOrElse(s"endpoint", {
+    throw new RuntimeException(s"Endpoint missing from configuration")
+  })
+  private val region = params.getOrElse(s"region", "us-east-1")
   private val s3Client =
     AmazonS3ClientBuilder.standard()
-      .withCredentials(loadFromHadoop(hadoopConfiguration))
+      .withCredentials(loadFromParams(params))
       .withPathStyleAccessEnabled(pathStyleAccess)
-      .withEndpointConfiguration(
-      new EndpointConfiguration(hadoopConfiguration.get(s"fs.s3a.endpoint", null), "us-east-1"))
+      .withEndpointConfiguration(new EndpointConfiguration(endpoint, region))
       .build()
 
-  private val defaultCsvFormat =
-    CSVFormat.DEFAULT.withRecordSeparator(System.getProperty("line.separator", "\n"))
-
-  val csvFormat = customCSVFormat(params, defaultCsvFormat)
-
-  private def customCSVFormat(params: Map[String, String], csvFormat: CSVFormat): CSVFormat = {
-
-    // delimiter :  "," :  Specifies the field delimiter.
-    // quote : '\"' : Specifies the quote character. Specifying an empty string is not supported and results in a malformed XML error.
-    // escape : '\\' : Specifies the escape character.
-    // comment : "#" : Specifies the comment character. The comment indicator cannot be disabled.
-    //                 In other words, a value of \u0000 is not supported.
-    val delimiter = params.getOrElse("delimiter", ",")
-    val quote = params.getOrElse("quote", "\"")
-    val escape = params.getOrElse("escape", "\\")
-    val comment = params.getOrElse("comment", "#")
-
-    csvFormat
-      .withDelimiter(delimiter.charAt(0))
-      .withQuote(quote.charAt(0))
-      .withEscape(escape.charAt(0))
-      .withCommentMarker(comment.charAt(0))
-  }
+  override lazy val schema: StructType = Option(userSchema).getOrElse({
+      // With no schema we return error.
+      throw new RuntimeException(s"Schema cannot be empty")
+  })
 
   private def staticCredentialsProvider(credentials: AWSCredentials): AWSCredentialsProvider = {
     new AWSCredentialsProvider {
@@ -115,9 +95,9 @@ case class SelectCSVRelation protected[spark] (
     }
   }
 
-  private def loadFromHadoop(hadoopCfg: Configuration): AWSCredentialsProvider = {
-    val accessKey = hadoopCfg.get(s"fs.s3a.access.key", null)
-    val secretKey = hadoopCfg.get(s"fs.s3a.secret.key", null)
+  private def loadFromParams(params: Map[String, String]): AWSCredentialsProvider = {
+    val accessKey = params.getOrElse(s"access_key", null)
+    val secretKey = params.getOrElse(s"secret_key", null)
     if (accessKey != null && secretKey != null) {
       Some(staticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey)))
     } else {
@@ -128,22 +108,18 @@ case class SelectCSVRelation protected[spark] (
     new DefaultAWSCredentialsProviderChain()
   }
 
-  private def resolveQuery(schema: StructType): String = {
-    if (schema == null) {
-      // With no schema we are not filtering any column names.
-      "select * from S3Object"
+  private def queryFromSchema(schema: StructType, filters: Array[Filter]): String = {
+    val columnList = schema.fields.map(x => s"${x.name}").mkString(",")
+    if (filters == null) {
+      s"select $columnList from S3Object"
     } else {
-      var index = 0
-      var selector = new Array[Any](schema.fields.length)
-      while (index < schema.fields.length) {
-        selector(index) = schema.fields(index).name
-        index += 1
-      }
-      "select " ++ selector.mkString(",") ++ " from S3Object"
+      val whereClause = FilterPushdown.buildWhereClause(schema, filters)
+      s"select $columnList from S3Object $whereClause"
     }
   }
 
-  private def selectRequest(location: Option[String], params: Map[String, String]): SelectObjectContentRequest = {
+  private def selectRequest(location: Option[String], params: Map[String, String],
+    schema: StructType, filters: Array[Filter]): SelectObjectContentRequest = {
     val s3URI = new AmazonS3URI(location.getOrElse(""))
 
     // TODO support
@@ -157,7 +133,7 @@ case class SelectCSVRelation protected[spark] (
     new SelectObjectContentRequest() { request =>
       request.setBucketName(s3URI.getBucket())
       request.setKey(s3URI.getKey())
-      request.setExpression(resolveQuery(userSchema))
+      request.setExpression(queryFromSchema(schema, filters))
       request.setExpressionType(ExpressionType.SQL)
 
       val inputSerialization = new InputSerialization()
@@ -178,15 +154,16 @@ case class SelectCSVRelation protected[spark] (
     }
   }
 
-  override lazy val schema: StructType = {
-    Option(userSchema).getOrElse(inferSchema())
-  }
-
-  private lazy val rows: List[Array[String]] = {
+  private def getRows(schema: StructType, filters: Array[Filter]): List[Array[String]] = {
     var records = new ListBuffer[Array[String]]()
-    val br = new BufferedReader(new InputStreamReader(s3Client.selectObjectContent(selectRequest(location, params))
-      .getPayload()
-      .getRecordsInputStream()))
+    val br = new BufferedReader(new InputStreamReader(
+      s3Client.selectObjectContent(
+        selectRequest(
+          location,
+          params,
+          schema,
+          filters)
+      ).getPayload().getRecordsInputStream()))
     var line : String = null
     while ( {line = br.readLine(); line != null}) {
       records += line.split(",")
@@ -197,8 +174,8 @@ case class SelectCSVRelation protected[spark] (
 
   override def toString: String = s"SelectCSVRelation()"
 
-  private def tokenRDD(schema: StructType): RDD[Row] = {
-    sqlContext.sparkContext.makeRDD(rows).mapPartitions{ iter =>
+  private def tokenRDD(schema: StructType, filters: Array[Filter]): RDD[Row] = {
+    sqlContext.sparkContext.makeRDD(getRows(schema, filters)).mapPartitions{ iter =>
       iter.map { m =>
         var index = 0
         val rowArray = new Array[Any](schema.fields.length)
@@ -213,27 +190,19 @@ case class SelectCSVRelation protected[spark] (
   }
 
   override def buildScan(): RDD[Row] = {
-    tokenRDD(schema)
+    tokenRDD(schema, null)
   }
 
-  override def buildScan(requiredColumns: Array[String]): RDD[Row] = {
-    val requiredFields = requiredColumns.map(schema(_))
-    val schemaFields = schema.fields
-    // Check if requested fields are same as schema
-    if (schemaFields.deep == requiredFields.deep) {
-      buildScan()
-    } else {
-      tokenRDD(StructType(requiredFields))
-    }
+  override def buildScan(columns: Array[String]): RDD[Row] = {
+    tokenRDD(pruneSchema(schema, columns), null)
   }
 
-  private def inferSchema(): StructType = {
-    val fields = new Array[StructField](rows(0).length)
-    var index = 0
-    while (index < rows(0).length) {
-      fields(index) = StructField(s"s._${index+1}", StringType, nullable = true)
-      index += 1
-    }
-    new StructType(fields)
+  override def buildScan(columns: Array[String], filters: Array[Filter]): RDD[Row] = {
+    tokenRDD(pruneSchema(schema, columns), filters)
+  }
+
+  private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
+    val fieldMap = Map(schema.fields.map(x => x.name -> x): _*)
+    new StructType(columns.map(name => fieldMap(name)))
   }
 }

@@ -18,9 +18,6 @@ package io.minio.spark.select
 // Java standard libraries
 import java.io.File
 
-// Apache commons libraries
-import org.apache.log4j.Logger
-
 // Spark internal libraries
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.sources.{BaseRelation, RelationProvider, SchemaRelationProvider}
@@ -29,11 +26,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.sources.DataSourceRegister
 
 class SelectJSONSource
-  extends RelationProvider
-  with SchemaRelationProvider
+  extends SchemaRelationProvider
   with DataSourceRegister {
-
-  private val logger = Logger.getLogger(getClass)
 
   private def checkPath(parameters: Map[String, String]): String = {
     parameters.getOrElse("path", sys.error("'path' must be specified for JSON data."))
@@ -43,10 +37,6 @@ class SelectJSONSource
    * Short alias for spark-select data source.
    */
   override def shortName(): String = "selectJSON"
-
-  override def createRelation(sqlContext: SQLContext, params: Map[String, String]): BaseRelation = {
-    createRelation(sqlContext, params, null)
-  }
 
   override def createRelation(sqlContext: SQLContext, params: Map[String, String], schema: StructType): SelectJSONRelation = {
     val path = checkPath(params)

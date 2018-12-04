@@ -10,20 +10,23 @@ This package can be used to download a dataframe from S3 compatible object stora
 ### Scala API
 Spark 2.3+:
 
-With custom schema for `CSV`.
+With schema with two columns for `CSV`.
 ```scala
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
-val struct = StructType(
-  StructField("name", StringType, true) ::
-    StructField("age", IntegerType, false) :: Nil)
+val schema = StructType(
+  List(
+    StructField("name", StringType, true),
+    StructField("age", IntegerType, false)
+  )
+)
 
-var df = spark.read.format("selectCSV").schema(struct).load("s3://sjm-airlines/people.csv")
-
-println(df.count())
+var df = spark.read.format("selectCSV").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.csv")
 
 println(df.show())
+
+println(df.select("age").filter("age > 19").show())
 ```
 
 With custom schema for `JSON`.
@@ -31,29 +34,18 @@ With custom schema for `JSON`.
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
-val struct = StructType(
-  StructField("name", StringType, true) ::
-    StructField("age", IntegerType, false) :: Nil)
+val schema = StructType(
+  List(
+    StructField("name", StringType, true),
+    StructField("age", IntegerType, false)
+  )
+)
 
-var df = spark.read.format("selectJSON").schema(struct).load("s3://sjm-airlines/people.json")
-
-println(df.count())
+var df = spark.read.format("selectJSON").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.json")
 
 println(df.show())
-```
 
-Inferred schema by automatically parsing the first record `CSV`
-```scala
-spark.read
-    .format("selectCSV")
-    .load("s3://bucket/object.csv")
-```
-
-Inferred schema by automatically parsing the first record in `JSON`
-```scala
-spark.read
-    .format("selectJSON")
-    .load("s3://bucket/object.json")
+println(df.select("age").filter("age > 19").show())
 ```
 
 ### Using spark-select
@@ -64,6 +56,7 @@ Setup all environment variables
 export HADOOP_HOME=${HOME}/spark/hadoop-2.8.5/
 export PATH=${PATH}:${HADOOP_HOME}/bin
 export SPARK_DIST_CLASSPATH=$(hadoop classpath)
+
 export SPARK_HOME=${HOME}/spark/spark-2.3.1-bin-without-hadoop/
 export PATH=${PATH}:${SPARK_HOME}/bin
 export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64/
@@ -75,8 +68,8 @@ spark-shell --jars target/scala-2.11/spark-select-assembly-0.0.1.jar
 
 Once the `spark-shell` has been successfully invoked.
 ```
-Spark context Web UI available at http://10.0.0.13:4040
-Spark context available as 'sc' (master = local[*], app id = local-1543570505559).
+Spark context Web UI available at http://192.168.1.32:4040
+Spark context available as 'sc' (master = local[*], app id = local-1543895749460).
 Spark session available as 'spark'.
 Welcome to
       ____              __
@@ -89,13 +82,12 @@ Using Scala version 2.11.8 (OpenJDK 64-Bit Server VM, Java 1.8.0_181)
 Type in expressions to have them evaluated.
 Type :help for more information.
 
-scala> :load examples/custom-csv.scala
-Loading examples/custom-csv.scala...
+scala> :load examples/csv.scala
+Loading examples/csv.scala...
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
-struct: org.apache.spark.sql.types.StructType = StructType(StructField(name,StringType,true), StructField(age,IntegerType,false))
+schema: org.apache.spark.sql.types.StructType = StructType(StructField(name,StringType,true), StructField(age,IntegerType,false))
 df: org.apache.spark.sql.DataFrame = [name: string, age: int]
-3
 +-------+---+
 |   name|age|
 +-------+---+
@@ -105,4 +97,6 @@ df: org.apache.spark.sql.DataFrame = [name: string, age: int]
 +-------+---+
 
 ()
+
+scala>
 ```
