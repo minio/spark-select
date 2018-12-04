@@ -6,8 +6,6 @@ scalaVersion := "2.11.12"
 
 crossScalaVersions := Seq("2.11.12")
 
-version := "0.0.1"
-
 spName := "minio/spark-select"
 
 spAppendScalaVersion := true
@@ -47,7 +45,8 @@ libraryDependencies ++= Seq(
 
 /**
  * release settings
- */
+  */
+
 publishMavenStyle := true
 
 releaseCrossBuild := true
@@ -70,13 +69,6 @@ publishTo := {
 
 pomExtra := (
   <url>https://github.com/minio/spark-select</url>
-    <licenses>
-      <license>
-        <name>Apache License, Verision 2.0</name>
-        <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
-        <distribution>repo</distribution>
-      </license>
-    </licenses>
     <scm>
       <connection>scm:git:github.com/minio/spark-select</connection>
       <developerConnection>scm:git:git@github.com:minio/spark-select</developerConnection>

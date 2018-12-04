@@ -109,13 +109,12 @@ case class SelectCSVRelation protected[spark] (
   }
 
   private def queryFromSchema(schema: StructType, filters: Array[Filter]): String = {
-    val columnList = schema.fields.map(x => s"${x.name}").mkString(",")
-    if (filters == null) {
-      s"select $columnList from S3Object"
-    } else {
-      val whereClause = FilterPushdown.buildWhereClause(schema, filters)
-      s"select $columnList from S3Object $whereClause"
+    var columnList = schema.fields.map(x => s"${x.name}").mkString(",")
+    if (columnList.length == 0) {
+      columnList = "*"
     }
+    val whereClause = FilterPushdown.buildWhereClause(schema, filters)
+    s"select $columnList from S3Object $whereClause"
   }
 
   private def selectRequest(location: Option[String], params: Map[String, String],
