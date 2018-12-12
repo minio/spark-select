@@ -119,16 +119,24 @@ case class SelectJSONRelation protected[spark] (
     }
   }
 
+  private def compressionType(params: Map[String, String]): CompressionType = {
+    params.getOrElse("compression", "none") match {
+      case "none" => CompressionType.NONE
+      case "gzip" => CompressionType.GZIP
+      case "bzip2" => CompressionType.BZIP2
+    }
+  }
+
+  private def jsonType(params: Map[String, String]): JSONType = {
+    params.getOrElse("multiline", "false") match {
+      case "false" => JSONType.LINES
+      case "true" => JSONType.DOCUMENT
+    }
+  }
+
   private def selectRequest(location: Option[String], params: Map[String, String],
     schema: StructType, filters: Array[Filter]): SelectObjectContentRequest = {
     val s3URI = new AmazonS3URI(location.getOrElse(""))
-
-    // TODO support
-    //
-    // compression : "none" : Indicates whether compression is used. "gzip" is the only setting supported besides "none".
-    // multiline : "false" : "false" specifies that the JSON is in S3 Select LINES format, meaning that each line in the
-    // input data contains a single JSON object. "true" specifies that the JSON is in S3 Select DOCUMENT format, meaning
-    // that a JSON object can span multiple lines in the input data.
 
     new SelectObjectContentRequest() { request =>
       request.setBucketName(s3URI.getBucket())
@@ -138,9 +146,9 @@ case class SelectJSONRelation protected[spark] (
 
       val inputSerialization = new InputSerialization()
       val jsonInput = new JSONInput()
-      jsonInput.withType(JSONType.LINES)
+      jsonInput.withType(jsonType(params))
       inputSerialization.setJson(jsonInput)
-      inputSerialization.setCompressionType(CompressionType.NONE)
+      inputSerialization.setCompressionType(compressionType(params))
       request.setInputSerialization(inputSerialization)
 
       val outputSerialization = new OutputSerialization()

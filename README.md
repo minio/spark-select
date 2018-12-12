@@ -127,17 +127,14 @@ The following options are available when using `s3selectCSV` and `s3selectJSON`.
 #### *Options with s3selectCSV*
 | Option | Default | Usage |
 |---|---|---|
-| `compression` | "none" | Indicates whether compression is used. "gzip" is the only setting supported besides "none".
+| `compression` | "none" | Indicates whether compression is used. "gzip", "bzip2" are values supported besides "none".
 | `delimiter` | "," | Specifies the field delimiter.
-| `quote` | '\"' | Specifies the quote character. Specifying an empty string is not supported and results in a malformed XML error.
-| `escape` | '\\' | Specifies the escape character.
 | `header` | "true" | "false" specifies that there is no header. "true" specifies that a header is in the first line. Only headers in the first line are supported, and empty lines before a header are not supported.
-| `comment` | "#" | Specifies the comment character. The comment indicator cannot be disabled. In other words, a value of \u0000 is not supported.
 
 #### *Options with s3selectJSON*
 | Option | Default | Usage |
 |---|---|---|
-| `compression` | "none" | Indicates whether compression is used. "gzip" is the only setting supported besides "none".
+| `compression` | "none" | Indicates whether compression is used. "gzip", "bzip2" are values supported besides "none".
 | `multiline` | "false" | "false" specifies that the JSON is in S3 Select LINES format, meaning that each line in the input data contains a single JSON object. "true" specifies that the JSON is in S3 Select DOCUMENT format, meaning that a JSON object can span multiple lines in the input data.
 
 ### Additional Examples

@@ -117,17 +117,24 @@ case class SelectCSVRelation protected[spark] (
     s"select $columnList from S3Object $whereClause"
   }
 
+  private def compressionType(params: Map[String, String]): CompressionType = {
+    params.getOrElse("compression", "none") match {
+      case "none" => CompressionType.NONE
+      case "gzip" => CompressionType.GZIP
+      case "bzip2" => CompressionType.BZIP2
+    }
+  }
+
+  private def headerInfo(params: Map[String, String]): FileHeaderInfo = {
+    params.getOrElse("header", "true") match {
+      case "false" => FileHeaderInfo.NONE
+      case "true" => FileHeaderInfo.USE
+    }
+  }
+
   private def selectRequest(location: Option[String], params: Map[String, String],
     schema: StructType, filters: Array[Filter]): SelectObjectContentRequest = {
     val s3URI = new AmazonS3URI(location.getOrElse(""))
-
-    // TODO support
-    //
-    // compression : "none" : Indicates whether compression is used. "gzip" is the only setting supported besides "none".
-    // header : "false" : "false" specifies that there is no header. "true" specifies that a header is in
-    //                    the first line. Only headers in the first line are supported, and empty lines
-    //                    before a header are not supported.
-    // nullValue : "" :
 
     new SelectObjectContentRequest() { request =>
       request.setBucketName(s3URI.getBucket())
@@ -137,11 +144,11 @@ case class SelectCSVRelation protected[spark] (
 
       val inputSerialization = new InputSerialization()
       val csvInput = new CSVInput()
-      csvInput.withFileHeaderInfo(FileHeaderInfo.USE)
+      csvInput.withFileHeaderInfo(headerInfo(params))
       csvInput.withRecordDelimiter('\n')
       csvInput.withFieldDelimiter(params.getOrElse("delimiter", ","))
       inputSerialization.setCsv(csvInput)
-      inputSerialization.setCompressionType(CompressionType.NONE)
+      inputSerialization.setCompressionType(compressionType(params))
       request.setInputSerialization(inputSerialization)
 
       val outputSerialization = new OutputSerialization()
