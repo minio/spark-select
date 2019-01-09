@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Minio, Inc.
+ * Copyright 2019 Minio, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,9 +21,6 @@ import java.io.BufferedReader
 // Import all utilities
 import io.minio.spark.select.util._
 
-// Apache commons
-import org.apache.commons.csv.{CSVFormat, QuoteMode}
-
 // For AmazonS3 client
 import com.amazonaws.services.s3.AmazonS3
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
@@ -37,7 +34,7 @@ import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 
 // Select API
 import com.amazonaws.services.s3.AmazonS3URI
-import com.amazonaws.services.s3.model.CSVInput
+import com.amazonaws.services.s3.model.ParquetInput
 import com.amazonaws.services.s3.model.CSVOutput
 import com.amazonaws.services.s3.model.CompressionType
 import com.amazonaws.services.s3.model.ExpressionType
@@ -48,8 +45,6 @@ import com.amazonaws.services.s3.model.SelectObjectContentResult
 import com.amazonaws.services.s3.model.SelectObjectContentEvent
 import com.amazonaws.services.s3.model.SelectObjectContentEvent.RecordsEvent
 import com.amazonaws.services.s3.model.FileHeaderInfo
-
-import org.apache.commons.csv.{CSVParser, CSVFormat, CSVRecord, QuoteMode}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
@@ -62,7 +57,7 @@ import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 /**
   * Abstract relation class to download data from S3 compatible storage
   */
-case class SelectCSVRelation protected[spark] (
+case class SelectParquetRelation protected[spark] (
   location: Option[String],
   params: Map[String, String],
   userSchema: StructType = null)(@transient val sqlContext: SQLContext)
@@ -108,21 +103,6 @@ case class SelectCSVRelation protected[spark] (
     new DefaultAWSCredentialsProviderChain()
   }
 
-  private def compressionType(params: Map[String, String]): CompressionType = {
-    params.getOrElse("compression", "none") match {
-      case "none" => CompressionType.NONE
-      case "gzip" => CompressionType.GZIP
-      case "bzip2" => CompressionType.BZIP2
-    }
-  }
-
-  private def headerInfo(params: Map[String, String]): FileHeaderInfo = {
-    params.getOrElse("header", "true") match {
-      case "false" => FileHeaderInfo.NONE
-      case "true" => FileHeaderInfo.USE
-    }
-  }
-
   private def selectRequest(location: Option[String], params: Map[String, String],
     schema: StructType, filters: Array[Filter]): SelectObjectContentRequest = {
     val s3URI = new AmazonS3URI(location.getOrElse(""))
@@ -134,18 +114,12 @@ case class SelectCSVRelation protected[spark] (
       request.setExpressionType(ExpressionType.SQL)
 
       val inputSerialization = new InputSerialization()
-      val csvInput = new CSVInput()
-      csvInput.withFileHeaderInfo(headerInfo(params))
-      csvInput.withRecordDelimiter('\n')
-      csvInput.withFieldDelimiter(params.getOrElse("delimiter", ","))
-      inputSerialization.setCsv(csvInput)
-      inputSerialization.setCompressionType(compressionType(params))
+      val parquetInput = new ParquetInput()
+      inputSerialization.setParquet(parquetInput)
       request.setInputSerialization(inputSerialization)
 
       val outputSerialization = new OutputSerialization()
       val csvOutput = new CSVOutput()
-      csvOutput.withRecordDelimiter('\n')
-      csvOutput.withFieldDelimiter(params.getOrElse("delimiter", ","))
       outputSerialization.setCsv(csvOutput)
       request.setOutputSerialization(outputSerialization)
     }
@@ -169,7 +143,7 @@ case class SelectCSVRelation protected[spark] (
     records.toList
   }
 
-  override def toString: String = s"SelectCSVRelation()"
+  override def toString: String = s"SelectParquetRelation()"
 
   private def tokenRDD(schema: StructType, filters: Array[Filter]): RDD[Row] = {
     sqlContext.sparkContext.makeRDD(getRows(schema, filters)).mapPartitions{ iter =>

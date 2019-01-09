@@ -39,7 +39,6 @@ import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.s3.AmazonS3URI
 import com.amazonaws.services.s3.model.JSONInput
 import com.amazonaws.services.s3.model.JSONType
-import com.amazonaws.services.s3.model.CSVInput
 import com.amazonaws.services.s3.model.CSVOutput
 import com.amazonaws.services.s3.model.CompressionType
 import com.amazonaws.services.s3.model.ExpressionType
@@ -109,16 +108,6 @@ case class SelectJSONRelation protected[spark] (
     new DefaultAWSCredentialsProviderChain()
   }
 
-  private def queryFromSchema(schema: StructType, filters: Array[Filter]): String = {
-    val columnList = schema.fields.map(x => s"${x.name}").mkString(",")
-    if (filters == null) {
-      s"select $columnList from S3Object"
-    } else {
-      val whereClause = FilterPushdown.buildWhereClause(schema, filters)
-      s"select $columnList from S3Object $whereClause"
-    }
-  }
-
   private def compressionType(params: Map[String, String]): CompressionType = {
     params.getOrElse("compression", "none") match {
       case "none" => CompressionType.NONE
@@ -141,7 +130,7 @@ case class SelectJSONRelation protected[spark] (
     new SelectObjectContentRequest() { request =>
       request.setBucketName(s3URI.getBucket())
       request.setKey(s3URI.getKey())
-      request.setExpression(queryFromSchema(schema, filters))
+      request.setExpression(FilterPushdown.queryFromSchema(schema, filters))
       request.setExpressionType(ExpressionType.SQL)
 
       val inputSerialization = new InputSerialization()
@@ -153,8 +142,6 @@ case class SelectJSONRelation protected[spark] (
 
       val outputSerialization = new OutputSerialization()
       val csvOutput = new CSVOutput()
-      csvOutput.withRecordDelimiter('\n')
-      csvOutput.withFieldDelimiter(params.getOrElse("delimiter", ","))
       outputSerialization.setCsv(csvOutput)
       request.setOutputSerialization(outputSerialization)
     }
@@ -172,7 +159,10 @@ case class SelectJSONRelation protected[spark] (
       ).getPayload().getRecordsInputStream()))
     var line : String = null
     while ( {line = br.readLine(); line != null}) {
-      records += line.split(",")
+      var lineSplits = line.split(",")
+      if (schema.fields.length == lineSplits.length) {
+        records += lineSplits
+      }
     }
     br.close()
     records.toList

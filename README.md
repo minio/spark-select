@@ -7,24 +7,24 @@ This library requires
 - Scala 2.11+
 
 ## Features
-S3 Select is supported with CSV and JSON files using `s3selectCSV` and `s3selectJSON` values to specify the data format.
+S3 Select is supported with CSV, JSON and Parquet files using `selectCSV`, `selectJSON` and `selectParquet` values to specify the data format.
 
 ### HowTo
 Include this package in your Spark Applications using:
 
 #### *spark-shell*, *pyspark*, or *spark-submit*
 ```
-> $SPARK_HOME/bin/spark-shell --packages io.minio:spark-select_2.11:1.0.1
+> $SPARK_HOME/bin/spark-shell --packages io.minio:spark-select_2.11:1.1
 ```
 
 #### *sbt*
 If you use the [sbt-spark-package plugin](http://github.com/databricks/sbt-spark-package), in your sbt build file, add:
 ```
-spDependencies += "minio/spark-select:1.0.1"
+spDependencies += "minio/spark-select:1.1"
 ```
 Otherwise,
 ```
-libraryDependencies += "io.minio" % "spark-select_2.11" % "1.0.1"
+libraryDependencies += "io.minio" % "spark-select_2.11" % "1.1"
 ```
 
 #### *Maven*
@@ -35,7 +35,7 @@ In your pom.xml, add:
   <dependency>
     <groupId>io.minio</groupId>
     <artifactId>spark-select_2.11</artifactId>
-    <version>1.0.1</version>
+    <version>1.1</version>
   </dependency>
 </dependencies>
 ```
@@ -83,7 +83,7 @@ scala>
 ```py
 spark
   .read
-  .format("s3selectCSV") // "s3selectJSON" for JSON
+  .format("selectCSV") // "selectJSON" for JSON or "selectParquet" for Parquet
   .schema(...) // mandatory
   .options(...) // optional
   .load("s3://path/to/my/datafiles")
@@ -91,14 +91,14 @@ spark
 
 #### *R*
 ```
-read.df("s3://path/to/my/datafiles", "s3selectCSV", schema)
+read.df("s3://path/to/my/datafiles", "selectCSV", schema)
 ```
 
 #### *Scala*
 ```
 spark
   .read
-  .format("s3selectCSV") // "s3selectJson" for Json
+  .format("selectCSV") // "selectJSON" for JSON or "selectParquet" for Parquet
   .schema(...) // mandatory
   .options(...) // optional. Examples:
   // .options(Map("quote" -> "\'", "header" -> "true")) or
@@ -108,11 +108,11 @@ spark
 
 #### *SQL*
 ```
-CREATE TEMPORARY VIEW MyView (number INT, name STRING) USING s3selectCSV OPTIONS (path "s3://path/to/my/datafiles")
+CREATE TEMPORARY VIEW MyView (number INT, name STRING) USING selectCSV OPTIONS (path "s3://path/to/my/datafiles")
 ```
 
 ### Options
-The following options are available when using `s3selectCSV` and `s3selectJSON`. If not specified, default values are used.
+The following options are available when using `selectCSV` and `selectJSON`. If not specified, default values are used.
 
 #### Common Options
 | Option | Default | Usage |
@@ -124,18 +124,21 @@ The following options are available when using `s3selectCSV` and `s3selectJSON`.
 |`secret_key`  | "" |secret_key is the password to your account. (Optional)|
 |`path_style_access` | "false" |Enable S3 path style access ie disabling the default virtual hosting behaviour. (Optional)|
 
-#### *Options with s3selectCSV*
+#### *Options with selectCSV*
 | Option | Default | Usage |
 |---|---|---|
 | `compression` | "none" | Indicates whether compression is used. "gzip", "bzip2" are values supported besides "none".
 | `delimiter` | "," | Specifies the field delimiter.
 | `header` | "true" | "false" specifies that there is no header. "true" specifies that a header is in the first line. Only headers in the first line are supported, and empty lines before a header are not supported.
 
-#### *Options with s3selectJSON*
+#### *Options with selectJSON*
 | Option | Default | Usage |
 |---|---|---|
 | `compression` | "none" | Indicates whether compression is used. "gzip", "bzip2" are values supported besides "none".
 | `multiline` | "false" | "false" specifies that the JSON is in S3 Select LINES format, meaning that each line in the input data contains a single JSON object. "true" specifies that the JSON is in S3 Select DOCUMENT format, meaning that a JSON object can span multiple lines in the input data.
+
+#### *Options with selectParquet*
+There are no **options** needed with Parquet files.
 
 ### Additional Examples
 With schema with two columns for `CSV`.
@@ -170,6 +173,25 @@ vl schema = StructType(
 )
 
 var df = spark.read.format("selectJSON").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.json")
+
+println(df.show())
+
+println(df.select("age").filter("age > 19").show())
+```
+
+With custom schema for `Parquet`.
+```scala
+import org.apache.spark.sql._
+import org.apache.spark.sql.types._
+
+val schema = StructType(
+ s List(
+    StructField("name", StringType, true),
+    StructField("age", IntegerType, false)
+  )
+)
+
+var df = spark.read.format("selectParquet").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.csv")
 
 println(df.show())
 

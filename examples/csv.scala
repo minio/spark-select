@@ -12,4 +12,4 @@ var df = spark.read.format("selectCSV").schema(schema).option("endpoint", "http:
 
 println(df.show())
 
-println(df.select("age").filter("age > 19").show())
+println(df.select("*").filter("name not like \"%Justin%\"").show())

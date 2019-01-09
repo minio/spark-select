@@ -52,7 +52,7 @@ private[spark] object FilterPushdown {
           case TimestampType => s"\\'${value.asInstanceOf[Timestamp]}\\'"
           case _ => value.toString
         }
-        s""""$attr" $comparisonOp $sqlEscapedValue"""
+        s"""s.$attr $comparisonOp $sqlEscapedValue"""
       }
     }
 
@@ -63,9 +63,9 @@ private[spark] object FilterPushdown {
       case LessThanOrEqual(attr, value) => buildComparison(attr, value, "<=")
       case GreaterThanOrEqual(attr, value) => buildComparison(attr, value, ">=")
       case IsNotNull(attr) =>
-        getTypeForAttribute(schema, attr).map(dataType => s""""$attr" IS NOT NULL""")
+        getTypeForAttribute(schema, attr).map(dataType => s"""s.$attr IS NOT NULL""")
       case IsNull(attr) =>
-        getTypeForAttribute(schema, attr).map(dataType => s""""$attr" IS NULL""")
+        getTypeForAttribute(schema, attr).map(dataType => s"""s.$attr IS NULL""")
       case _ => None
     }
   }
@@ -81,4 +81,18 @@ private[spark] object FilterPushdown {
       None
     }
   }
+
+  def queryFromSchema(schema: StructType, filters: Array[Filter]): String = {
+    var columnList = schema.fields.map(x => s"s.${x.name}").mkString(",")
+    if (columnList.length == 0) {
+      columnList = "*"
+    }
+    val whereClause = buildWhereClause(schema, filters)
+    if (whereClause.length == 0) {
+      s"select $columnList from S3Object s"
+    } else {
+      s"select $columnList from S3Object s $whereClause"
+    }
+  }
+
 }
