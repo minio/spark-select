@@ -147,7 +147,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
 val schema = StructType(
- s List(
+  List(
     StructField("name", StringType, true),
     StructField("age", IntegerType, false)
   )
@@ -157,7 +157,7 @@ var df = spark.read.format("selectCSV").schema(schema).option("endpoint", "http:
 
 println(df.show())
 
-println(df.select("age").filter("age > 19").show())
+println(df.select("*").filter("name not like \"%Justin%\"").show())
 ```
 
 With custom schema for `JSON`.
@@ -165,7 +165,7 @@ With custom schema for `JSON`.
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
-vl schema = StructType(
+val schema = StructType(
   List(
     StructField("name", StringType, true),
     StructField("age", IntegerType, false)
@@ -176,7 +176,7 @@ var df = spark.read.format("selectJSON").schema(schema).option("endpoint", "http
 
 println(df.show())
 
-println(df.select("age").filter("age > 19").show())
+println(df.select("*").filter("age > 19").show())
 ```
 
 With custom schema for `Parquet`.
@@ -185,15 +185,15 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
 val schema = StructType(
- s List(
+  List(
     StructField("name", StringType, true),
     StructField("age", IntegerType, false)
   )
 )
 
-var df = spark.read.format("selectParquet").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.csv")
+var df = spark.read.format("selectParquet").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.parquet")
 
 println(df.show())
 
-println(df.select("age").filter("age > 19").show())
+println(df.select("*").filter("age > 19").show())
 ```
