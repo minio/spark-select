@@ -8,7 +8,7 @@ val schema = StructType(
   )
 )
 
-var df = spark.read.format("selectParquet").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.parquet")
+var df = spark.read.format("minioSelectParquet").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.parquet")
 
 println(df.show())
 

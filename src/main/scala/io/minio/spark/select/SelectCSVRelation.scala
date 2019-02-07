@@ -27,12 +27,6 @@ import org.apache.commons.csv.{CSVFormat, QuoteMode}
 // For AmazonS3 client
 import com.amazonaws.services.s3.AmazonS3
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
-
-// For BasicAWSCredentials
-import com.amazonaws.auth.AWSCredentials
-import com.amazonaws.auth.AWSCredentialsProvider
-import com.amazonaws.auth.BasicAWSCredentials
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 
 // Select API
@@ -78,7 +72,7 @@ case class SelectCSVRelation protected[spark] (
   private val region = params.getOrElse(s"region", "us-east-1")
   private val s3Client =
     AmazonS3ClientBuilder.standard()
-      .withCredentials(loadFromParams(params))
+      .withCredentials(Credentials.load(params))
       .withPathStyleAccessEnabled(pathStyleAccess)
       .withEndpointConfiguration(new EndpointConfiguration(endpoint, region))
       .build()
@@ -87,26 +81,6 @@ case class SelectCSVRelation protected[spark] (
       // With no schema we return error.
       throw new RuntimeException(s"Schema cannot be empty")
   })
-
-  private def staticCredentialsProvider(credentials: AWSCredentials): AWSCredentialsProvider = {
-    new AWSCredentialsProvider {
-      override def getCredentials: AWSCredentials = credentials
-      override def refresh(): Unit = {}
-    }
-  }
-
-  private def loadFromParams(params: Map[String, String]): AWSCredentialsProvider = {
-    val accessKey = params.getOrElse(s"access_key", null)
-    val secretKey = params.getOrElse(s"secret_key", null)
-    if (accessKey != null && secretKey != null) {
-      Some(staticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey)))
-    } else {
-      None
-    }
-  }.getOrElse {
-    // Finally, fall back on the instance profile provider
-    new DefaultAWSCredentialsProviderChain()
-  }
 
   private def compressionType(params: Map[String, String]): CompressionType = {
     params.getOrElse("compression", "none") match {

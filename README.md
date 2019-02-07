@@ -7,7 +7,7 @@ This library requires
 - Scala 2.11+
 
 ## Features
-S3 Select is supported with CSV, JSON and Parquet files using `selectCSV`, `selectJSON` and `selectParquet` values to specify the data format.
+S3 Select is supported with CSV, JSON and Parquet files using `minioSelectCSV`, `minioSelectJSON` and `minioSelectParquet` values to specify the data format.
 
 ### HowTo
 Include this package in your Spark Applications using:
@@ -83,7 +83,7 @@ scala>
 ```py
 spark
   .read
-  .format("selectCSV") // "selectJSON" for JSON or "selectParquet" for Parquet
+  .format("minioSelectCSV") // "minioSelectJSON" for JSON or "minioSelectParquet" for Parquet
   .schema(...) // mandatory
   .options(...) // optional
   .load("s3://path/to/my/datafiles")
@@ -91,14 +91,14 @@ spark
 
 #### *R*
 ```
-read.df("s3://path/to/my/datafiles", "selectCSV", schema)
+read.df("s3://path/to/my/datafiles", "minioSelectCSV", schema)
 ```
 
 #### *Scala*
 ```
 spark
   .read
-  .format("selectCSV") // "selectJSON" for JSON or "selectParquet" for Parquet
+  .format("minioSelectCSV") // "minioSelectJSON" for JSON or "minioSelectParquet" for Parquet
   .schema(...) // mandatory
   .options(...) // optional. Examples:
   // .options(Map("quote" -> "\'", "header" -> "true")) or
@@ -108,11 +108,11 @@ spark
 
 #### *SQL*
 ```
-CREATE TEMPORARY VIEW MyView (number INT, name STRING) USING selectCSV OPTIONS (path "s3://path/to/my/datafiles")
+CREATE TEMPORARY VIEW MyView (number INT, name STRING) USING minioSelectCSV OPTIONS (path "s3://path/to/my/datafiles")
 ```
 
 ### Options
-The following options are available when using `selectCSV` and `selectJSON`. If not specified, default values are used.
+The following options are available when using `minioSelectCSV` and `minioSelectJSON`. If not specified, default values are used.
 
 #### Common Options
 | Option | Default | Usage |
@@ -124,20 +124,20 @@ The following options are available when using `selectCSV` and `selectJSON`. If 
 |`secret_key`  | "" |secret_key is the password to your account. (Optional)|
 |`path_style_access` | "false" |Enable S3 path style access ie disabling the default virtual hosting behaviour. (Optional)|
 
-#### *Options with selectCSV*
+#### *Options with minioSelectCSV*
 | Option | Default | Usage |
 |---|---|---|
 | `compression` | "none" | Indicates whether compression is used. "gzip", "bzip2" are values supported besides "none".
 | `delimiter` | "," | Specifies the field delimiter.
 | `header` | "true" | "false" specifies that there is no header. "true" specifies that a header is in the first line. Only headers in the first line are supported, and empty lines before a header are not supported.
 
-#### *Options with selectJSON*
+#### *Options with minioSelectJSON*
 | Option | Default | Usage |
 |---|---|---|
 | `compression` | "none" | Indicates whether compression is used. "gzip", "bzip2" are values supported besides "none".
 | `multiline` | "false" | "false" specifies that the JSON is in S3 Select LINES format, meaning that each line in the input data contains a single JSON object. "true" specifies that the JSON is in S3 Select DOCUMENT format, meaning that a JSON object can span multiple lines in the input data.
 
-#### *Options with selectParquet*
+#### *Options with minioSelectParquet*
 There are no **options** needed with Parquet files.
 
 ### Additional Examples
@@ -153,7 +153,7 @@ val schema = StructType(
   )
 )
 
-var df = spark.read.format("selectCSV").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.csv")
+var df = spark.read.format("minioSelectCSV").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.csv")
 
 println(df.show())
 
@@ -172,7 +172,7 @@ val schema = StructType(
   )
 )
 
-var df = spark.read.format("selectJSON").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.json")
+var df = spark.read.format("minioSelectJSON").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.json")
 
 println(df.show())
 
@@ -191,7 +191,7 @@ val schema = StructType(
   )
 )
 
-var df = spark.read.format("selectParquet").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.parquet")
+var df = spark.read.format("minioSelectParquet").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.parquet")
 
 println(df.show())
 

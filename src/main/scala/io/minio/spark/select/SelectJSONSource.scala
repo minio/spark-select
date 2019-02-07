@@ -36,7 +36,7 @@ class SelectJSONSource
   /**
    * Short alias for spark-select data source.
    */
-  override def shortName(): String = "selectJSON"
+  override def shortName(): String = "minioSelectJSON"
 
   override def createRelation(sqlContext: SQLContext, params: Map[String, String], schema: StructType): SelectJSONRelation = {
     val path = checkPath(params)

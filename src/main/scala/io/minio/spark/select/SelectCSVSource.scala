@@ -36,7 +36,7 @@ class SelectCSVSource
   /**
    * Short alias for spark-select data source.
    */
-  override def shortName(): String = "selectCSV"
+  override def shortName(): String = "minioSelectCSV"
 
   override def createRelation(sqlContext: SQLContext, params: Map[String, String], schema: StructType): SelectCSVRelation = {
     val path = checkPath(params)

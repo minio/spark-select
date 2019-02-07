@@ -36,7 +36,7 @@ class SelectParquetSource
   /**
    * Short alias for spark-select data source.
    */
-  override def shortName(): String = "selectParquet"
+  override def shortName(): String = "minioSelectParquet"
 
   override def createRelation(sqlContext: SQLContext, params: Map[String, String], schema: StructType): SelectParquetRelation = {
     val path = checkPath(params)
