@@ -156,7 +156,7 @@ private[spark] object Select {
       csvInput.withFileHeaderInfo(headerInfo(params))
       csvInput.withRecordDelimiter('\n')
       csvInput.withQuoteCharacter(params.getOrElse(s"quote", "\""))
-      csvInput.withQuoteEscapeCharacter(params.getOrElse(s"escape", "\\\\"))
+      csvInput.withQuoteEscapeCharacter(params.getOrElse(s"escape", "\""))
       csvInput.withComments(params.getOrElse(s"comment", "#"))
       csvInput.withFieldDelimiter(params.getOrElse(s"delimiter", ","))
       inputSerialization.setCsv(csvInput)

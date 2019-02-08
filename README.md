@@ -129,7 +129,10 @@ The following options are available when using `minioSelectCSV` and `minioSelect
 |---|---|---|
 | `compression` | "none" | Indicates whether compression is used. "gzip", "bzip2" are values supported besides "none".
 | `delimiter` | "," | Specifies the field delimiter.
+| `quote` | '"' | Specifies the quote character. Specifying an empty string is not supported and results in a malformed XML error.
+| `escape` | '"' | Specifies the quote escape character.
 | `header` | "true" | "false" specifies that there is no header. "true" specifies that a header is in the first line. Only headers in the first line are supported, and empty lines before a header are not supported.
+| `comment` | "#" | Specifies the comment character.
 
 #### *Options with minioSelectJSON*
 | Option | Default | Usage |
@@ -146,18 +149,27 @@ With schema with two columns for `CSV`.
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
-val schema = StructType(
-  List(
-    StructField("name", StringType, true),
-    StructField("age", IntegerType, false)
-  )
-)
+object app {
+  def main(args: Array[String]) {
+    val schema = StructType(
+      List(
+        StructField("name", StringType, true),
+        StructField("age", IntegerType, false)
+      )
+    )
 
-var df = spark.read.format("minioSelectCSV").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.csv")
+    val df = spark
+      .read
+      .format("minioSelectCSV")
+      .schema(schema)
+      .load("s3://sjm-airlines/people.csv")
 
-println(df.show())
+    println(df.show())
 
-println(df.select("*").filter("name not like \"%Justin%\"").show())
+    println(df.select("*").filter("age > 19").show())
+
+  }
+}
 ```
 
 With custom schema for `JSON`.
@@ -165,18 +177,27 @@ With custom schema for `JSON`.
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
-val schema = StructType(
-  List(
-    StructField("name", StringType, true),
-    StructField("age", IntegerType, false)
-  )
-)
+object app {
+  def main(args: Array[String]) {
+    val schema = StructType(
+      List(
+        StructField("name", StringType, true),
+        StructField("age", IntegerType, false)
+      )
+    )
 
-var df = spark.read.format("minioSelectJSON").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.json")
+    val df = spark
+      .read
+      .format("minioSelectJSON")
+      .schema(schema)
+      .load("s3://sjm-airlines/people.json")
 
-println(df.show())
+    println(df.show())
 
-println(df.select("*").filter("age > 19").show())
+    println(df.select("*").filter("age > 19").show())
+
+  }
+}
 ```
 
 With custom schema for `Parquet`.
@@ -184,16 +205,25 @@ With custom schema for `Parquet`.
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
-val schema = StructType(
-  List(
-    StructField("name", StringType, true),
-    StructField("age", IntegerType, false)
-  )
-)
+object app {
+  def main(args: Array[String]) {
+    val schema = StructType(
+      List(
+        StructField("name", StringType, true),
+        StructField("age", IntegerType, false)
+      )
+    )
 
-var df = spark.read.format("minioSelectParquet").schema(schema).option("endpoint", "http://127.0.0.1:9000").option("access_key", "minio").option("secret_key", "minio123").option("path_style_access", "true").load("s3://sjm-airlines/people.parquet")
+    val df = spark
+      .read
+      .format("minioSelectParquet")
+      .schema(schema)
+      .load("s3://sjm-airlines/people.parquet")
 
-println(df.show())
+    println(df.show())
 
-println(df.select("*").filter("age > 19").show())
+    println(df.select("*").filter("age > 19").show())
+
+  }
+}
 ```
