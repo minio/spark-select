@@ -29,20 +29,6 @@ import com.amazonaws.services.s3.AmazonS3
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 
-// Select API
-import com.amazonaws.services.s3.AmazonS3URI
-import com.amazonaws.services.s3.model.CSVInput
-import com.amazonaws.services.s3.model.CSVOutput
-import com.amazonaws.services.s3.model.CompressionType
-import com.amazonaws.services.s3.model.ExpressionType
-import com.amazonaws.services.s3.model.InputSerialization
-import com.amazonaws.services.s3.model.OutputSerialization
-import com.amazonaws.services.s3.model.SelectObjectContentRequest
-import com.amazonaws.services.s3.model.SelectObjectContentResult
-import com.amazonaws.services.s3.model.SelectObjectContentEvent
-import com.amazonaws.services.s3.model.SelectObjectContentEvent.RecordsEvent
-import com.amazonaws.services.s3.model.FileHeaderInfo
-
 import org.apache.commons.csv.{CSVParser, CSVFormat, CSVRecord, QuoteMode}
 
 import org.apache.spark.rdd.RDD
@@ -65,14 +51,17 @@ case class SelectCSVRelation protected[spark] (
     with PrunedScan
     with PrunedFilteredScan {
 
-  private val pathStyleAccess = params.getOrElse(s"path_style_access", "false") == "true"
-  private val endpoint = params.getOrElse(s"endpoint", {
-    throw new RuntimeException(s"Endpoint missing from configuration")
-  })
-  private val region = params.getOrElse(s"region", "us-east-1")
+  private val API_PATH_STYLE_ACCESS = s"fs.s3a.path.style.access"
+  private val SERVER_ENDPOINT = s"fs.s3a.endpoint"
+  private val SERVER_REGION = s"fs.s3a.region"
+
+  private val hadoopConfiguration = sqlContext.sparkContext.hadoopConfiguration
+  private val pathStyleAccess = hadoopConfiguration.get(API_PATH_STYLE_ACCESS, "false") == "true"
+  private val endpoint = hadoopConfiguration.get(SERVER_ENDPOINT, "https://s3.amazonaws.com")
+  private val region = hadoopConfiguration.get(SERVER_REGION, "us-east-1")
   private val s3Client =
     AmazonS3ClientBuilder.standard()
-      .withCredentials(Credentials.load(params))
+      .withCredentials(Credentials.load(location, hadoopConfiguration))
       .withPathStyleAccessEnabled(pathStyleAccess)
       .withEndpointConfiguration(new EndpointConfiguration(endpoint, region))
       .build()
@@ -82,58 +71,16 @@ case class SelectCSVRelation protected[spark] (
       throw new RuntimeException(s"Schema cannot be empty")
   })
 
-  private def compressionType(params: Map[String, String]): CompressionType = {
-    params.getOrElse("compression", "none") match {
-      case "none" => CompressionType.NONE
-      case "gzip" => CompressionType.GZIP
-      case "bzip2" => CompressionType.BZIP2
-    }
-  }
-
-  private def headerInfo(params: Map[String, String]): FileHeaderInfo = {
-    params.getOrElse("header", "true") match {
-      case "false" => FileHeaderInfo.NONE
-      case "true" => FileHeaderInfo.USE
-    }
-  }
-
-  private def selectRequest(location: Option[String], params: Map[String, String],
-    schema: StructType, filters: Array[Filter]): SelectObjectContentRequest = {
-    val s3URI = new AmazonS3URI(location.getOrElse(""))
-
-    new SelectObjectContentRequest() { request =>
-      request.setBucketName(s3URI.getBucket())
-      request.setKey(s3URI.getKey())
-      request.setExpression(FilterPushdown.queryFromSchema(schema, filters))
-      request.setExpressionType(ExpressionType.SQL)
-
-      val inputSerialization = new InputSerialization()
-      val csvInput = new CSVInput()
-      csvInput.withFileHeaderInfo(headerInfo(params))
-      csvInput.withRecordDelimiter('\n')
-      csvInput.withFieldDelimiter(params.getOrElse("delimiter", ","))
-      inputSerialization.setCsv(csvInput)
-      inputSerialization.setCompressionType(compressionType(params))
-      request.setInputSerialization(inputSerialization)
-
-      val outputSerialization = new OutputSerialization()
-      val csvOutput = new CSVOutput()
-      csvOutput.withRecordDelimiter('\n')
-      csvOutput.withFieldDelimiter(params.getOrElse("delimiter", ","))
-      outputSerialization.setCsv(csvOutput)
-      request.setOutputSerialization(outputSerialization)
-    }
-  }
-
   private def getRows(schema: StructType, filters: Array[Filter]): List[Array[String]] = {
     var records = new ListBuffer[Array[String]]()
     val br = new BufferedReader(new InputStreamReader(
       s3Client.selectObjectContent(
-        selectRequest(
+        Select.requestCSV(
           location,
           params,
           schema,
-          filters)
+          filters,
+          hadoopConfiguration)
       ).getPayload().getRecordsInputStream()))
     var line : String = null
     while ( {line = br.readLine(); line != null}) {

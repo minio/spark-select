@@ -15,11 +15,15 @@
  */
 package io.minio.spark.select
 
+import java.net.URI
+
 // For BasicAWSCredentials
 import com.amazonaws.auth.AWSCredentials
 import com.amazonaws.auth.AWSCredentialsProvider
 import com.amazonaws.auth.BasicAWSCredentials
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
+
+import org.apache.hadoop.conf.Configuration
 
 private[spark] object Credentials {
   private def staticCredentialsProvider(credentials: AWSCredentials): AWSCredentialsProvider = {
@@ -29,16 +33,35 @@ private[spark] object Credentials {
     }
   }
 
-  def load(params: Map[String, String]): AWSCredentialsProvider = {
-    val accessKey = params.getOrElse(s"access_key", null)
-    val secretKey = params.getOrElse(s"secret_key", null)
-    if (accessKey != null && secretKey != null) {
-      Some(staticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey)))
-    } else {
-      None
+  def load(location: Option[String], hadoopConfiguration: Configuration): AWSCredentialsProvider = {
+    val uri = new URI(location.getOrElse(""))
+    val uriScheme = uri.getScheme
+
+    uriScheme match {
+      case "s3" | "s3a" =>
+        // This matches what S3A does, with one exception: we don't
+        // support anonymous credentials. First, try to parse from URI:
+        Option(uri.getUserInfo).flatMap { userInfo =>
+          if (userInfo.contains(":")) {
+            val Array(accessKey, secretKey) = userInfo.split(":")
+            Some(staticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey)))
+          } else {
+            None
+          }
+        }.orElse {
+          val accessKey = hadoopConfiguration.get(s"fs.s3a.access.key", null)
+          val secretKey = hadoopConfiguration.get(s"fs.s3a.secret.key", null)
+          if (accessKey != null && secretKey != null) {
+            Some(staticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey)))
+          } else {
+            None
+          }
+        }.getOrElse {
+          // Finally, fall back on the instance profile provider
+          new DefaultAWSCredentialsProviderChain()
+        }
+      case other =>
+        throw new IllegalArgumentException(s"Unrecognized scheme $other; expected s3, or s3a")
     }
-  }.getOrElse {
-    // Finally, fall back on the instance profile provider
-    new DefaultAWSCredentialsProviderChain()
   }
 }

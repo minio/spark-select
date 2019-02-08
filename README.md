@@ -114,16 +114,6 @@ CREATE TEMPORARY VIEW MyView (number INT, name STRING) USING minioSelectCSV OPTI
 ### Options
 The following options are available when using `minioSelectCSV` and `minioSelectJSON`. If not specified, default values are used.
 
-#### Common Options
-| Option | Default | Usage |
-|---|---|---|
-| `endpoint` | "" | endpoint is an URL as listed below: (Required)|
-| | |https://s3.amazonaws.com |
-| | |https://play.minio.io:9000 |
-|`access_key`   | ""  |access_key is like user-id that uniquely identifies your account. (Optional)|
-|`secret_key`  | "" |secret_key is the password to your account. (Optional)|
-|`path_style_access` | "false" |Enable S3 path style access ie disabling the default virtual hosting behaviour. (Optional)|
-
 #### *Options with minioSelectCSV*
 | Option | Default | Usage |
 |---|---|---|
