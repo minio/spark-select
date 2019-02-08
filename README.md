@@ -9,6 +9,16 @@ This library requires
 ## Features
 S3 Select is supported with CSV, JSON and Parquet files using `minioSelectCSV`, `minioSelectJSON` and `minioSelectParquet` values to specify the data format.
 
+### Limitations
+- Spark CSV and JSON options such as nanValue, positiveInf, negativeInf, and options related to corrupt records (for example, failfast and dropmalformed mode) are not supported.
+- Using commas (,) within decimals is not supported. For example, 10,000 is not supported and 10000 is.
+- The following filters are not pushed down to Minio:
+  - Aggregate functions such as COUNT() and SUM().
+  - Filters that CAST() an attribute. For example, CAST(stringColumn as INT) = 1.
+  - Filters with an attribute that is an object or is complex. For example, intArray[1] = 1, objectColumn.objectNumber = 1.
+  - Filters for which the value is not a literal value. For example, intColumn1 = intColumn2
+  - Only Select [Supported Data Types](https://docs.aws.amazon.com/AmazonS3/latest/dev/s3-glacier-select-sql-reference-data-types.html) are supported with the documented limitations.
+
 ### HowTo
 Include this package in your Spark Applications using:
 
@@ -125,7 +135,7 @@ The following options are available when using `minioSelectCSV` and `minioSelect
 | Option | Default | Usage |
 |---|---|---|
 | `compression` | "none" | Indicates whether compression is used. "gzip", "bzip2" are values supported besides "none".
-| `multiline` | "false" | "false" specifies that the JSON is in S3 Select LINES format, meaning that each line in the input data contains a single JSON object. "true" specifies that the JSON is in S3 Select DOCUMENT format, meaning that a JSON object can span multiple lines in the input data.
+| `multiline` | "false" | "false" specifies that the JSON is in Select LINES format, meaning that each line in the input data contains a single JSON object. "true" specifies that the JSON is in Select DOCUMENT format, meaning that a JSON object can span multiple lines in the input data.
 
 #### *Options with minioSelectParquet*
 There are no **options** needed with Parquet files.
