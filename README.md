@@ -24,17 +24,17 @@ Include this package in your Spark Applications using:
 
 #### *spark-shell*, *pyspark*, or *spark-submit*
 ```
-> $SPARK_HOME/bin/spark-shell --packages io.minio:spark-select_2.11:1.1
+> $SPARK_HOME/bin/spark-shell --packages io.minio:spark-select_2.11:2.0
 ```
 
 #### *sbt*
 If you use the [sbt-spark-package plugin](http://github.com/databricks/sbt-spark-package), in your sbt build file, add:
 ```
-spDependencies += "minio/spark-select:1.1"
+spDependencies += "minio/spark-select:2.0"
 ```
 Otherwise,
 ```
-libraryDependencies += "io.minio" % "spark-select_2.11" % "1.1"
+libraryDependencies += "io.minio" % "spark-select_2.11" % "2.0"
 ```
 
 #### *Maven*
@@ -45,7 +45,7 @@ In your pom.xml, add:
   <dependency>
     <groupId>io.minio</groupId>
     <artifactId>spark-select_2.11</artifactId>
-    <version>1.1</version>
+    <version>2.0</version>
   </dependency>
 </dependencies>
 ```
