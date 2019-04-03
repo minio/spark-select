@@ -77,20 +77,19 @@ private[spark] object Select {
     }
   }
 
-  def requestParquet(location: Option[String], params: Map[String, String],
+  def requestParquet(bucket: String, key: String, params: Map[String, String],
     schema: StructType, filters: Array[Filter],
     hadoopConfiguration: Configuration): SelectObjectContentRequest = {
-    val s3URI = new AmazonS3URI(location.getOrElse(""))
 
     new SelectObjectContentRequest() { request =>
-      request.setBucketName(s3URI.getBucket())
-      request.setKey(s3URI.getKey())
+      request.setBucketName(bucket)
+      request.setKey(key)
       request.setExpression(FilterPushdown.queryFromSchema(schema, filters))
       request.setExpressionType(ExpressionType.SQL)
       val algo = hadoopConfiguration.get(SERVER_ENCRYPTION_ALGORITHM, null)
-      val key = hadoopConfiguration.get(SERVER_ENCRYPTION_KEY, null)
       if (algo != null) {
-        request.withSSECustomerKey(sseCustomerKey(algo, key))
+        request.withSSECustomerKey(sseCustomerKey(algo,
+          hadoopConfiguration.get(SERVER_ENCRYPTION_KEY, null)))
       }
 
       val inputSerialization = new InputSerialization()
@@ -105,20 +104,19 @@ private[spark] object Select {
     }
   }
 
-  def requestJSON(location: Option[String], params: Map[String, String],
+  def requestJSON(bucket: String, key: String, params: Map[String, String],
     schema: StructType, filters: Array[Filter],
     hadoopConfiguration: Configuration): SelectObjectContentRequest = {
-    val s3URI = new AmazonS3URI(location.getOrElse(""))
 
     new SelectObjectContentRequest() { request =>
-      request.setBucketName(s3URI.getBucket())
-      request.setKey(s3URI.getKey())
+      request.setBucketName(bucket)
+      request.setKey(key)
       request.setExpression(FilterPushdown.queryFromSchema(schema, filters))
       request.setExpressionType(ExpressionType.SQL)
       val algo = hadoopConfiguration.get(SERVER_ENCRYPTION_ALGORITHM, null)
-      val key = hadoopConfiguration.get(SERVER_ENCRYPTION_KEY, null)
       if (algo != null) {
-        request.withSSECustomerKey(sseCustomerKey(algo, key))
+        request.withSSECustomerKey(sseCustomerKey(algo,
+          hadoopConfiguration.get(SERVER_ENCRYPTION_KEY, null)))
       }
 
       val inputSerialization = new InputSerialization()
@@ -136,19 +134,18 @@ private[spark] object Select {
   }
 
 
-  def requestCSV(location: Option[String], params: Map[String, String],
+  def requestCSV(bucket: String, key: String, params: Map[String, String],
     schema: StructType, filters: Array[Filter],
     hadoopConfiguration: Configuration): SelectObjectContentRequest = {
-    val s3URI = new AmazonS3URI(location.getOrElse(""))
     new SelectObjectContentRequest() { request =>
-      request.setBucketName(s3URI.getBucket())
-      request.setKey(s3URI.getKey())
+      request.setBucketName(bucket)
+      request.setKey(key)
       request.setExpression(FilterPushdown.queryFromSchema(schema, filters))
       request.setExpressionType(ExpressionType.SQL)
       val algo = hadoopConfiguration.get(SERVER_ENCRYPTION_ALGORITHM, null)
-      val key = hadoopConfiguration.get(SERVER_ENCRYPTION_KEY, null)
       if (algo != null) {
-        request.withSSECustomerKey(sseCustomerKey(algo, key))
+        request.withSSECustomerKey(sseCustomerKey(algo,
+          hadoopConfiguration.get(SERVER_ENCRYPTION_KEY, null)))
       }
 
       val inputSerialization = new InputSerialization()

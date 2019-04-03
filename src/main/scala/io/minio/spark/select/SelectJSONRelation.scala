@@ -15,6 +15,8 @@
  */
 package io.minio.spark.select
 
+import scala.collection.JavaConversions.asScalaBuffer
+
 import java.io.InputStreamReader
 import java.io.BufferedReader
 
@@ -26,8 +28,13 @@ import org.apache.commons.csv.{CSVFormat, QuoteMode}
 
 // For AmazonS3 client
 import com.amazonaws.services.s3.AmazonS3
+import com.amazonaws.services.s3.AmazonS3URI
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
+
+import com.amazonaws.services.s3.model.ListObjectsV2Request
+import com.amazonaws.services.s3.model.ListObjectsV2Result
+import com.amazonaws.services.s3.model.S3ObjectSummary
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
@@ -69,25 +76,38 @@ case class SelectJSONRelation protected[spark] (
       throw new RuntimeException(s"Schema cannot be empty")
   })
 
+
   private def getRows(schema: StructType, filters: Array[Filter]): List[Array[String]] = {
     var records = new ListBuffer[Array[String]]()
-    val br = new BufferedReader(new InputStreamReader(
-      s3Client.selectObjectContent(
-        Select.requestJSON(
-          location,
-          params,
-          schema,
-          filters,
-          hadoopConfiguration)
-      ).getPayload().getRecordsInputStream()))
-    var line : String = null
-    while ( {line = br.readLine(); line != null}) {
-      var lineSplits = line.split(",")
-      if (schema.fields.length == lineSplits.length) {
-        records += lineSplits
-      }
-    }
-    br.close()
+    var req = new ListObjectsV2Request()
+    var result = new ListObjectsV2Result()
+    var s3URI = new AmazonS3URI(location.getOrElse(""))
+
+    req.withBucketName(s3URI.getBucket())
+    req.withPrefix(s3URI.getKey().stripSuffix("*"))
+    req.withMaxKeys(1000)
+
+    do {
+      result = s3Client.listObjectsV2(req)
+      asScalaBuffer(result.getObjectSummaries()).foreach(objectSummary => {
+        val br = new BufferedReader(new InputStreamReader(
+          s3Client.selectObjectContent(
+            Select.requestJSON(
+              objectSummary.getBucketName(),
+              objectSummary.getKey(),
+              params,
+              schema,
+              filters,
+              hadoopConfiguration)
+          ).getPayload().getRecordsInputStream()))
+        var line : String = null
+        while ( {line = br.readLine(); line != null}) {
+          records += line.split(",")
+        }
+        br.close()
+      })
+      req.setContinuationToken(result.getNextContinuationToken())
+    } while (result.isTruncated())
     records.toList
   }
 
