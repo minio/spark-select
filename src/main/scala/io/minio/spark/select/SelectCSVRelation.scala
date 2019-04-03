@@ -78,8 +78,8 @@ case class SelectCSVRelation protected[spark] (
       throw new RuntimeException(s"Schema cannot be empty")
   })
 
-  private def getRows(schema: StructType, filters: Array[Filter]): List[Array[String]] = {
-    var records = new ListBuffer[Array[String]]()
+  private def getRows(schema: StructType, filters: Array[Filter]): Seq[Row] = {
+    var records = new ListBuffer[Row]
     var req = new ListObjectsV2Request()
     var result = new ListObjectsV2Result()
     var s3URI = new AmazonS3URI(location.getOrElse(""))
@@ -103,7 +103,16 @@ case class SelectCSVRelation protected[spark] (
           ).getPayload().getRecordsInputStream()))
         var line : String = null
         while ( {line = br.readLine(); line != null}) {
-          records += line.split(",")
+          var row = new Array[Any](schema.fields.length)
+          var rowValues = line.split(params.getOrElse("delimiter", ","))
+          var index = 0
+          while (index < rowValues.length) {
+            val field = schema.fields(index)
+            row(index) = TypeCast.castTo(rowValues(index), field.dataType,
+              field.nullable)
+            index += 1
+          }
+          records += Row.fromSeq(row)
         }
         br.close()
       })
@@ -115,18 +124,7 @@ case class SelectCSVRelation protected[spark] (
   override def toString: String = s"SelectCSVRelation()"
 
   private def tokenRDD(schema: StructType, filters: Array[Filter]): RDD[Row] = {
-    sqlContext.sparkContext.makeRDD(getRows(schema, filters)).mapPartitions{ iter =>
-      iter.map { m =>
-        var index = 0
-        val rowArray = new Array[Any](schema.fields.length)
-        while (index < schema.fields.length) {
-          val field = schema.fields(index)
-          rowArray(index) = TypeCast.castTo(m(index), field.dataType, field.nullable)
-          index += 1
-        }
-        Row.fromSeq(rowArray)
-      }
-    }
+    sqlContext.sparkContext.makeRDD(getRows(schema, filters))
   }
 
   override def buildScan(): RDD[Row] = {
