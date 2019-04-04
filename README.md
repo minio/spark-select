@@ -24,17 +24,17 @@ Include this package in your Spark Applications using:
 
 #### *spark-shell*, *pyspark*, or *spark-submit*
 ```
-> $SPARK_HOME/bin/spark-shell --packages io.minio:spark-select_2.11:2.0
+> $SPARK_HOME/bin/spark-shell --packages io.minio:spark-select_2.11:2.1
 ```
 
 #### *sbt*
 If you use the [sbt-spark-package plugin](http://github.com/databricks/sbt-spark-package), in your sbt build file, add:
 ```
-spDependencies += "minio/spark-select:2.0"
+spDependencies += "minio/spark-select:2.1"
 ```
 Otherwise,
 ```
-libraryDependencies += "io.minio" % "spark-select_2.11" % "2.0"
+libraryDependencies += "io.minio" % "spark-select_2.11" % "2.1"
 ```
 
 #### *Maven*
@@ -45,7 +45,7 @@ In your pom.xml, add:
   <dependency>
     <groupId>io.minio</groupId>
     <artifactId>spark-select_2.11</artifactId>
-    <version>2.0</version>
+    <version>2.1</version>
   </dependency>
 </dependencies>
 ```
@@ -65,7 +65,7 @@ export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64/
 
 git clone https://github.com/minio/spark-select
 sbt assembly
-spark-shell --jars target/scala-2.11/spark-select-assembly-0.0.1.jar
+spark-shell --jars target/scala-2.11/spark-select-assembly-2.1.jar
 ```
 
 Once the `spark-shell` has been successfully invoked.
