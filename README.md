@@ -1,5 +1,5 @@
-# Minio Spark Select
-Minio Spark select enables retrieving only required data from an object using Select API.
+# MinIO Spark Select
+MinIO Spark select enables retrieving only required data from an object using Select API.
 
 ## Requirements
 This library requires
@@ -12,7 +12,7 @@ S3 Select is supported with CSV, JSON and Parquet files using `minioSelectCSV`, 
 ### Limitations
 - Spark CSV and JSON options such as nanValue, positiveInf, negativeInf, and options related to corrupt records (for example, failfast and dropmalformed mode) are not supported.
 - Using commas (,) within decimals is not supported. For example, 10,000 is not supported and 10000 is.
-- The following filters are not pushed down to Minio:
+- The following filters are not pushed down to MinIO:
   - Aggregate functions such as COUNT() and SUM().
   - Filters that CAST() an attribute. For example, CAST(stringColumn as INT) = 1.
   - Filters with an attribute that is an object or is complex. For example, intArray[1] = 1, objectColumn.objectNumber = 1.

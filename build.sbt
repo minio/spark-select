@@ -77,7 +77,7 @@ pomExtra := (
     <developers>
       <developer>
         <id>minio</id>
-        <name>Minio</name>
+        <name>MinIO</name>
         <url>http://www.minio.io</url>
       </developer>
     </developers>)
