@@ -7,7 +7,9 @@ This library requires
 - Scala 2.11+
 
 ## Features
-S3 Select is supported with CSV, JSON and Parquet files using `minioSelectCSV`, `minioSelectJSON` and `minioSelectParquet` values to specify the data format.
+- S3 Select is supported with CSV, JSON and Parquet files using `minioSelectCSV`, `minioSelectJSON` and `minioSelectParquet` values to specify the data format.
+- S3 Select supports select on multiple objects.
+- S3 Select supports querying SSE-C encrypted objects.
 
 ### Limitations
 - Spark CSV and JSON options such as nanValue, positiveInf, negativeInf, and options related to corrupt records (for example, failfast and dropmalformed mode) are not supported.
