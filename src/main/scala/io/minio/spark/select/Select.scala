@@ -18,7 +18,6 @@ package io.minio.spark.select
 import org.apache.hadoop.conf.Configuration
 
 // Select API
-import com.amazonaws.services.s3.AmazonS3URI
 import com.amazonaws.services.s3.model.JSONInput
 import com.amazonaws.services.s3.model.JSONType
 import com.amazonaws.services.s3.model.CSVInput
