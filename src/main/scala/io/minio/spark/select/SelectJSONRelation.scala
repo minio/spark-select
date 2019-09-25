@@ -81,7 +81,7 @@ case class SelectJSONRelation protected[spark] (
     var records = new ListBuffer[Row]
     var req = new ListObjectsV2Request()
     var result = new ListObjectsV2Result()
-    var s3URI = new AmazonS3URI(location.getOrElse(""))
+    var s3URI = new AmazonS3URI.toAmazonS3URI(new URI(location.getOrElse("")))
 
     req.withBucketName(s3URI.getBucket())
     req.withPrefix(s3URI.getKey().stripSuffix("*"))
