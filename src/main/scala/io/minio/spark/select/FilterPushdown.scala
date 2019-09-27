@@ -47,12 +47,12 @@ private[spark] object FilterPushdown {
     def buildComparison(attr: String, value: Any, comparisonOp: String): Option[String] = {
       getTypeForAttribute(schema, attr).map { dataType =>
         val sqlEscapedValue: String = dataType match {
-          case StringType => s"\\'${value.toString.replace("'", "\\'\\'")}\\'"
-          case DateType => s"\\'${value.asInstanceOf[Date]}\\'"
-          case TimestampType => s"\\'${value.asInstanceOf[Timestamp]}\\'"
+          case StringType => s""""${value.toString.replace("'", "\\'\\'")}""""
+          case DateType => s""""${value.asInstanceOf[Date]}""""
+          case TimestampType => s""""${value.asInstanceOf[Timestamp]}""""
           case _ => value.toString
         }
-        s"""s.$attr $comparisonOp $sqlEscapedValue"""
+        s"s."+s""""$attr""""+s" $comparisonOp $sqlEscapedValue"
       }
     }
 
@@ -79,7 +79,7 @@ private[spark] object FilterPushdown {
   }
 
   def queryFromSchema(schema: StructType, filters: Array[Filter]): String = {
-    var columnList = schema.fields.map(x => s"s.${x.name}").mkString(",")
+    var columnList = schema.fields.map(x => s"s."+s""""${x.name}"""").mkString(",")
     if (columnList.length == 0) {
       columnList = "*"
     }

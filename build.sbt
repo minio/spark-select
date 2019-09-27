@@ -33,7 +33,8 @@ assemblyMergeStrategy in assembly := {
 // Dependent libraries
 libraryDependencies ++= Seq(
   "com.amazonaws" % "aws-java-sdk" % "1.11.434" exclude("com.fasterxml.jackson.core", "jackson-databind"),
-  "org.apache.commons" % "commons-csv" % "1.1",
+  "org.apache.commons" % "commons-csv" % "1.7",
+  "org.slf4j" % "slf4j-api" % "1.7.5" % "provided",
   "org.mockito" % "mockito-core" % "2.0.31-beta"
 )
 

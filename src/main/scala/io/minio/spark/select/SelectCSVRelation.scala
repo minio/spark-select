@@ -16,6 +16,11 @@
 package io.minio.spark.select
 
 import scala.collection.JavaConversions.asScalaBuffer
+import scala.collection.JavaConverters._
+
+import scala.util.control.NonFatal
+
+import org.slf4j.LoggerFactory
 
 import java.io.InputStreamReader
 import java.io.BufferedReader
@@ -24,7 +29,7 @@ import java.io.BufferedReader
 import io.minio.spark.select.util._
 
 // Apache commons
-import org.apache.commons.csv.{CSVFormat, QuoteMode}
+import org.apache.commons.csv._
 
 // For AmazonS3 client
 import com.amazonaws.services.s3.AmazonS3
@@ -35,8 +40,6 @@ import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.s3.model.ListObjectsV2Request
 import com.amazonaws.services.s3.model.ListObjectsV2Result
 import com.amazonaws.services.s3.model.S3ObjectSummary
-
-import org.apache.commons.csv.{CSVParser, CSVFormat, CSVRecord, QuoteMode}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
@@ -73,12 +76,14 @@ case class SelectCSVRelation protected[spark] (
       .withEndpointConfiguration(new EndpointConfiguration(endpoint, region))
       .build()
 
+  private val logger = LoggerFactory.getLogger(SelectCSVRelation.getClass)
+
   override lazy val schema: StructType = Option(userSchema).getOrElse({
       // With no schema we return error.
       throw new RuntimeException(s"Schema cannot be empty")
   })
 
-  private def getRows(schema: StructType, filters: Array[Filter]): Seq[Row] = {
+  private def getRows(prunedSchema: StructType, filters: Array[Filter]): Seq[Row] = {
     var records = new ListBuffer[Row]
     var req = new ListObjectsV2Request()
     var result = new ListObjectsV2Result()
@@ -88,33 +93,39 @@ case class SelectCSVRelation protected[spark] (
     req.withPrefix(s3URI.getKey().stripSuffix("*"))
     req.withMaxKeys(1000)
 
+    val csvFormat = CSVFormat.DEFAULT
+      .withHeader(prunedSchema.fields.map(x => x.name): _*)
+      .withRecordSeparator("\n")
+      .withDelimiter(params.getOrElse("delimiter", ",").charAt(0))
+      .withQuote(params.getOrElse("quote", "\"").charAt(0))
+      .withEscape(params.getOrElse(s"escape", "\"").charAt(0))
+      .withCommentMarker(params.getOrElse(s"comment", "#").charAt(0))
+
     do {
       result = s3Client.listObjectsV2(req)
       asScalaBuffer(result.getObjectSummaries()).foreach(objectSummary => {
-        val br = new BufferedReader(new InputStreamReader(
-          s3Client.selectObjectContent(
-            Select.requestCSV(
-              objectSummary.getBucketName(),
-              objectSummary.getKey(),
-              params,
-              schema,
-              filters,
-              hadoopConfiguration)
-          ).getPayload().getRecordsInputStream()))
-        var line : String = null
-        while ( {line = br.readLine(); line != null}) {
-          var row = new Array[Any](schema.fields.length)
-          var rowValues = line.split(params.getOrElse("delimiter", ","))
-          var index = 0
-          while (index < rowValues.length) {
-            val field = schema.fields(index)
-            row(index) = TypeCast.castTo(rowValues(index), field.dataType,
-              field.nullable)
-            index += 1
+        val in = s3Client.selectObjectContent(
+          Select.requestCSV(
+            objectSummary.getBucketName(),
+            objectSummary.getKey(),
+            params,
+            prunedSchema,
+            filters,
+            hadoopConfiguration)
+        ).getPayload().getRecordsInputStream()
+        var parser = CSVParser.parse(in, java.nio.charset.Charset.forName("UTF-8"), csvFormat)
+        try {
+          for (record <- parser.asScala) {
+            records += Row.fromSeq(prunedSchema.fields.map(x => {
+              TypeCast.castTo(record.get(x.name), x.dataType, x.nullable)
+            }))
           }
-          records += Row.fromSeq(row)
+        } catch {
+          case NonFatal(e) => {
+            logger.error(s"Exception while parsing ", e)
+          }
         }
-        br.close()
+        parser.close()
       })
       req.setContinuationToken(result.getNextContinuationToken())
     } while (result.isTruncated())
